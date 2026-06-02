@@ -1,0 +1,21 @@
+# Build outputs
+*.exe
+*.o
+*.obj
+*.dll
+*.pdb
+
+# Release packages
+release/
+*.zip
+
+# Temporary files
+*.tmp
+*.log
+
+# VS Code local cache
+.vscode/ipch/
+
+# OS files
+.DS_Store
+Thumbs.db
