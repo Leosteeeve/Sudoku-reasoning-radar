@@ -118,6 +118,38 @@ D:\Soduku\SudokuSolver.exe
 
 The launch environment prepends MSYS2 UCRT64 paths so SDL2 DLLs can be found.
 
+## Website And Publishing
+
+This project now includes a static GitHub Pages-ready website.
+
+- Website source: `website/`
+- GitHub Pages folder: `docs/`
+- Website preview script: `preview_website.bat`
+- Website sync script: `sync_website_to_docs.bat`
+- Packaging script: `package_windows.bat`
+- Windows release package guide: `PACKAGE_WINDOWS.md`
+- GitHub Pages deployment guide: `DEPLOY_GITHUB_PAGES.md`
+
+Local preview:
+
+```bat
+preview_website.bat
+```
+
+GitHub Pages recommendation:
+
+1. Edit the source website in `website/`.
+2. Run `sync_website_to_docs.bat`.
+3. Commit both `website/` and `docs/`.
+4. In GitHub Pages settings, choose `main` branch and `/docs` folder.
+
+The website currently uses placeholder links:
+
+- Windows download: `downloads/SudokuReasoningRadar_Windows.zip`
+- GitHub URL: `#github-link-placeholder`
+
+Replace these after you create a real release ZIP or GitHub repository. Do not commit passwords, tokens, cookies, API keys, or private personal files.
+
 ## Display
 
 The SDL2 window is resizable and uses a real responsive layout instead of fixed logical scaling. The board, right-side panel, controls, and bottom timeline are recalculated from the renderer output size each frame. Fullscreen uses SDL's desktop fullscreen mode, which preserves the desktop display mode while expanding the app to the screen.
