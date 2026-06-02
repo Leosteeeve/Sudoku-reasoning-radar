@@ -6,8 +6,10 @@
 *.pdb
 
 # Release packages
-release/
 *.zip
+release/
+website/downloads/*.zip
+docs/downloads/*.zip
 
 # Temporary files
 *.tmp
