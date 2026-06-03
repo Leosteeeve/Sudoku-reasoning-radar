@@ -1,8 +1,8 @@
 # Sudoku Reasoning Radar
 
-Version: v0.2.1
+Version: v0.3.0 WebAssembly Preview + v0.2.1 Windows desktop
 
-A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import, mistake detection, and a local puzzle library.
+A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract, plus a v0.3.0 WebAssembly browser preview built with Emscripten and SDL2. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import on Windows, mistake detection, and local puzzle storage.
 
 ## Prompt 2 Features
 
@@ -57,6 +57,76 @@ Known limitations:
 - Low-confidence cells should be reviewed before import.
 - OCR mistakes may make a puzzle invalid or unsolvable.
 - Manual correction is part of the intended workflow.
+
+## v0.3.0 WebAssembly Browser Preview
+
+- Browser-playable Sudoku board compiled from `web_main.cpp` with Emscripten.
+- Uses the existing solver core: Board, Solver, DLXSolver, StepRecorder, PuzzleGenerator, HintCoach, and DifficultyAnalyzer.
+- Includes editable cells, candidate display, solver mode switching, puzzle generation, hint coach, difficulty analysis, mistake checking, import/export string overlay, localStorage puzzle save/load, settings/analytics/library/shortcuts overlays, and animated trace scrubbing.
+- Uses an Emscripten main loop through `emscripten_set_main_loop_arg`.
+- GitHub Pages output lives in `docs/play/`.
+- The playable page is a full-viewport app shell: a compact top bar plus an SDL canvas that fills the remaining browser space.
+- Web canvas resize is synchronized across CSS size, canvas backing store, SDL window size, renderer viewport, layout, and input hit testing.
+- OpenCV and Tesseract are not linked in WebAssembly. OCR Import is currently available in the Windows version; browser OCR support is planned for a later release.
+
+Web build scripts:
+
+```bat
+scripts\build_web.bat
+scripts\serve_web.bat
+scripts\clean_web.bat
+```
+
+Before building, activate Emscripten:
+
+```bat
+D:\emsdk\emsdk_env.bat
+```
+
+If `em++` is not available, `scripts\build_web.bat` prints:
+
+```text
+Emscripten not found.
+Run:
+D:\emsdk\emsdk_env.bat
+```
+
+Expected Web publish files:
+
+- `docs/play/index.html`
+- `docs/play/web_style.css`
+- `docs/play/web_launcher.js`
+- `docs/play/SudokuReasoningRadar.js`
+- `docs/play/SudokuReasoningRadar.wasm`
+- optional `docs/play/SudokuReasoningRadar.data`
+
+Local Web testing:
+
+```bat
+scripts\serve_web.bat
+```
+
+Open:
+
+```text
+http://localhost:8000/
+```
+
+Do not double-click `docs/play/index.html`, because browser `file://` loading usually blocks WebAssembly side files.
+
+VS Code Web preview:
+
+1. Open the Run and Debug dropdown.
+2. Select `Run Web Preview (Edge)`.
+3. Press Ctrl+F5.
+
+That configuration runs `Build Web Preview`, starts the no-cache local server, and opens:
+
+```text
+http://localhost:8000/?fresh=web-parity-hotfix
+```
+
+The default `Run Sudoku Solver` configuration is still the Windows desktop app. Pressing Ctrl+F5 while that configuration is selected will not refresh an already-open browser page.
 
 ## Local Puzzle Library Format
 
@@ -190,7 +260,7 @@ set PATH=D:\MSYS2\ucrt64\bin;D:\MSYS2\usr\bin;%PATH%
 SudokuSolver.exe
 ```
 
-In VS Code, open this folder and press Ctrl+F5. The launch configuration builds first and runs:
+In VS Code, open this folder, choose `Run Sudoku Solver`, and press Ctrl+F5. The launch configuration builds first and runs:
 
 ```text
 D:\Soduku\SudokuSolver.exe
@@ -204,8 +274,11 @@ This project now includes a static GitHub Pages-ready website.
 
 - Website source: `website/`
 - GitHub Pages folder: `docs/`
+- Browser-playable app source: `web/`
+- Browser-playable app output: `docs/play/`
 - Website preview script: `preview_website.bat`
 - Website sync script: `sync_website_to_docs.bat`
+- Web build script: `scripts/build_web.bat`
 - Packaging script: `package_windows.bat`
 - Release self-test script: `test_release.bat`
 - Windows release package guide: `PACKAGE_WINDOWS.md`
@@ -221,8 +294,9 @@ GitHub Pages recommendation:
 
 1. Edit the source website in `website/`.
 2. Run `sync_website_to_docs.bat`.
-3. Commit both `website/` and `docs/`.
-4. In GitHub Pages settings, choose `main` branch and `/docs` folder.
+3. Run `scripts\build_web.bat` after `D:\emsdk\emsdk_env.bat` if the browser app changed.
+4. Commit `website/`, `web/`, and `docs/`.
+5. In GitHub Pages settings, choose `main` branch and `/docs` folder.
 
 The website now points the Windows download button at the latest GitHub Release asset:
 
@@ -272,7 +346,9 @@ The main interface now uses progressive disclosure. The board and current reason
 - Turbo mode focuses on speed and uniqueness detection, not detailed human-style animation.
 - Visual animations are SDL2-based and intentionally lightweight.
 - Human Logic Mode can stop on puzzles that require techniques beyond the implemented set.
+- The v0.3.0 Web Preview disables OCR and uses browser `localStorage` for a lightweight puzzle library.
+- The browser build prioritizes logical-pixel correctness over high-DPI supersampling, so canvas rendering and mouse hit testing stay aligned across resize and fullscreen.
 
 ## Roadmap
 
-- v0.3.0: WebAssembly browser version, Daily Challenge, advanced generator tuning, richer Hint Coach explanations, puzzle library filters, and deeper difficulty history.
+- v0.3.x: Browser OCR exploration, Daily Challenge, advanced generator tuning, richer Hint Coach explanations, puzzle library filters, and deeper difficulty history.

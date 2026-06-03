@@ -14,6 +14,7 @@
             <span>Sudoku Reasoning Radar</span>
         </a>
         <nav class="nav-links" aria-label="Primary navigation">
+            <a href="./play/">Play</a>
             <a href="#experience">Experience</a>
             <a href="#workflow">Workflow</a>
             <a href="#engine">Engine</a>
@@ -35,15 +36,19 @@
                             <span></span>
                         </div>
                     </div>
-                    <p class="hero-lede">A Windows C++ solver that makes every candidate, deduction, guess, contradiction, and backtrack visible.</p>
+                    <p class="hero-lede">A Windows C++ solver and WebAssembly preview that make every candidate, deduction, guess, contradiction, and backtrack visible.</p>
                     <div class="hero-actions" aria-label="Primary actions">
-                        <a class="button button-primary" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
+                        <a class="button button-primary" href="./play/">
+                            Play in Browser
+                        </a>
+                        <a class="button button-secondary" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
                             Download Windows ZIP
                         </a>
                         <a class="button button-secondary" href="#experience">Watch The Flow</a>
                         <a class="button button-ghost" href="#github-link-placeholder">GitHub</a>
                     </div>
                     <div class="hero-status" aria-label="Release highlights">
+                        <span>v0.3.0 WebAssembly Preview</span>
                         <span>v0.2.1 OCR Import</span>
                         <span>3 solver modes</span>
                         <span>Animated trace playback</span>
@@ -63,17 +68,29 @@
 
                     <div class="demo-shell">
                         <div class="demo-board" data-demo-board></div>
-                        <aside class="demo-panel">
-                            <p class="panel-kicker">Live trace</p>
-                            <h2 id="demoTechnique">Naked Single</h2>
-                            <p id="demoReason">Only one candidate survives the row, column, and box masks.</p>
-                            <div class="trace-stack">
-                                <span id="demoStep">Step 18</span>
-                                <span id="demoCell">r4c7 = 5</span>
-                                <span id="demoDepth">Depth 0</span>
-                            </div>
-                            <div class="trace-meter"><span id="demoMeter"></span></div>
-                        </aside>
+                        <div class="demo-panel-grid" aria-label="Animated reasoning detail cards">
+                            <aside class="demo-panel">
+                                <p class="panel-kicker">Live trace</p>
+                                <h2 id="demoTechnique">Naked Single</h2>
+                                <p id="demoReason">Only one candidate survives the row, column, and box masks.</p>
+                                <div class="trace-stack">
+                                    <span id="demoStep">Step 18</span>
+                                    <span id="demoCell">r4c7 = 5</span>
+                                    <span id="demoDepth">Depth 0</span>
+                                </div>
+                                <div class="trace-meter"><span id="demoMeter"></span></div>
+                            </aside>
+                            <aside class="demo-panel demo-web-panel">
+                                <p class="panel-kicker">Browser preview</p>
+                                <h2>WebAssembly build</h2>
+                                <p>The v0.3.0 preview runs the solver core in a browser canvas with generator, hints, import/export, analytics, and localStorage library support.</p>
+                                <div class="trace-stack">
+                                    <span>SDL2 canvas</span>
+                                    <span>OCR stays Windows-only</span>
+                                    <span>GitHub Pages ready</span>
+                                </div>
+                            </aside>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -92,6 +109,36 @@
                 <strong>OCR to playable board</strong>
                 <span>OpenCV and Tesseract turn clear screenshots into editable puzzles.</span>
             </article>
+            <article class="signal-card reveal">
+                <strong>Browser preview</strong>
+                <span>WebAssembly runs the solver core from GitHub Pages while keeping OCR in the Windows app.</span>
+            </article>
+        </section>
+
+        <section class="web-preview section-shell" id="web-preview">
+            <div class="section-heading reveal">
+                <p class="eyebrow">WebAssembly</p>
+                <h2>Try the solver without installing the desktop app.</h2>
+                <p>The browser version is a focused v0.3.0 preview: same puzzle model, solver modes, generator, hint coach, difficulty analyzer, step playback, and import/export flow, packaged for GitHub Pages.</p>
+            </div>
+
+            <div class="web-preview-grid">
+                <article class="web-preview-card reveal">
+                    <span>01</span>
+                    <strong>Interactive canvas</strong>
+                    <p>Resizable SDL2 board with keyboard editing, candidate marks, trace scrubbing, and fullscreen support.</p>
+                </article>
+                <article class="web-preview-card reveal">
+                    <span>02</span>
+                    <strong>Browser-safe features</strong>
+                    <p>Generator, hints, analytics, settings, shortcuts, import/export, and localStorage library are available in the web preview.</p>
+                </article>
+                <article class="web-preview-card reveal">
+                    <span>03</span>
+                    <strong>Windows keeps OCR</strong>
+                    <p>OpenCV and Tesseract are intentionally excluded from WebAssembly; image OCR remains in the Windows release.</p>
+                </article>
+            </div>
         </section>
 
         <section class="experience section-shell" id="experience">
@@ -253,10 +300,13 @@
             <div class="release-card reveal">
                 <div>
                     <p class="eyebrow">Release</p>
-                    <h2>Download the Windows build.</h2>
-                    <p>Latest package: <strong>v0.2.1</strong>. Keep the DLL files and <code>tessdata</code> folder next to the executable.</p>
+                    <h2>Play in browser or download Windows.</h2>
+                    <p>Latest desktop package: <strong>v0.2.1</strong>. Web preview: <strong>v0.3.0</strong>. Keep the DLL files and <code>tessdata</code> folder next to the Windows executable for OCR.</p>
                 </div>
                 <div class="release-actions">
+                    <a class="button button-primary large" href="./play/">
+                        Play in Browser
+                    </a>
                     <a class="button button-primary large" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
                         Download Windows ZIP
                     </a>

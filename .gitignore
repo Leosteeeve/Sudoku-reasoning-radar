@@ -9,6 +9,7 @@
 # Release packages
 *.zip
 release/
+web_build/
 website/downloads/*.zip
 docs/downloads/*.zip
 

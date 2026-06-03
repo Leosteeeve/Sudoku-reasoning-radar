@@ -26,6 +26,58 @@
                 "panel": "dedicated",
                 "clear": true
             }
+        },
+        {
+            "label": "Build Web Preview",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "call D:\\emsdk\\emsdk_env.bat && call scripts\\build_web.bat"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": "build",
+            "isBackground": false,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
+        },
+        {
+            "label": "Serve Web Preview",
+            "type": "shell",
+            "command": "cmd",
+            "args": [
+                "/c",
+                "call scripts\\serve_web.bat"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "dependsOn": "Build Web Preview",
+            "dependsOrder": "sequence",
+            "isBackground": true,
+            "problemMatcher": {
+                "owner": "web-preview",
+                "pattern": {
+                    "regexp": "^(.*)$",
+                    "message": 1
+                },
+                "background": {
+                    "activeOnStart": true,
+                    "beginsPattern": "^Serving .*$",
+                    "endsPattern": "^Cache disabled\\."
+                }
+            },
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": false
+            }
         }
     ]
 }

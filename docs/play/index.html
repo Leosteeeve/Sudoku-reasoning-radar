@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="Play the WebAssembly preview of Sudoku Reasoning Radar in the browser.">
+    <title>Sudoku Reasoning Radar Web Preview</title>
+    <link rel="stylesheet" href="web_style.css">
+</head>
+<body>
+    <div class="app-shell">
+        <header class="web-topbar">
+            <a class="web-brand" href="../" aria-label="Back to Sudoku Reasoning Radar home">
+                <span class="brand-grid" aria-hidden="true"></span>
+                <span>Sudoku Reasoning Radar</span>
+            </a>
+            <span class="version-pill">Web Preview v0.3.0</span>
+            <nav class="web-links" aria-label="Preview navigation">
+                <a href="../">Website</a>
+                <a href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip">Windows ZIP</a>
+                <button id="fullscreenButton" type="button">Fullscreen</button>
+            </nav>
+        </header>
+
+        <main class="canvas-wrap" aria-label="Sudoku Reasoning Radar WebAssembly app">
+            <div class="loading-panel" id="loadingPanel">
+                <div class="loader-grid" aria-hidden="true">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <div>
+                    <strong id="statusText">Preparing WebAssembly runtime...</strong>
+                    <div class="progress-track"><span id="progressFill"></span></div>
+                    <p id="runtimeHint">If the app does not start, run scripts/build_web.bat after activating D:\emsdk\emsdk_env.bat.</p>
+                </div>
+            </div>
+            <canvas id="canvas" tabindex="-1" oncontextmenu="event.preventDefault()"></canvas>
+            <pre class="runtime-log" id="runtimeLog" aria-live="polite"></pre>
+        </main>
+    </div>
+
+    <script src="web_launcher.js?v=20260604-web-parity-hotfix"></script>
+</body>
+</html>

@@ -32,6 +32,14 @@
             "MIMode": "gdb",
             "miDebuggerPath": "D:\\MSYS2\\ucrt64\\bin\\gdb.exe",
             "preLaunchTask": "Build Sudoku Solver"
+        },
+        {
+            "name": "Run Web Preview (Edge)",
+            "type": "pwa-msedge",
+            "request": "launch",
+            "url": "http://localhost:8000/?fresh=web-parity-hotfix",
+            "webRoot": "${workspaceFolder}\\docs\\play",
+            "preLaunchTask": "Serve Web Preview"
         }
     ]
 }
