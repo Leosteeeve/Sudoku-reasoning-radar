@@ -1,6 +1,8 @@
 # Sudoku Reasoning Radar
 
-A Windows C++17 visual Sudoku solver built with SDL2 and SDL2_ttf. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, and a Turbo exact-cover solver.
+Version: v0.2.0
+
+A Windows C++17 visual Sudoku solver built with SDL2 and SDL2_ttf. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, mistake detection, and a local puzzle library.
 
 ## Prompt 2 Features
 
@@ -18,6 +20,41 @@ A Windows C++17 visual Sudoku solver built with SDL2 and SDL2_ttf. It supports e
 - Candidate display has three modes: Off, Focused, and All. Focused is the default so an empty board no longer floods every cell with 1-9.
 - Dark "reasoning radar" styling with blueprint grid, scan sweep, highlighted row/column/box bands, step timeline, hover/pressed buttons, and stronger visual accents for logic/guess/backtrack/contradiction.
 - Text wrapping in the right panel prevents step reasons, status text, and controls from overlapping.
+
+## v0.2.0 Features
+
+- Puzzle Generator: press `G` to generate a unique puzzle; press `Shift+G` or `Diff` to cycle Easy / Medium / Hard / Expert generation targets.
+- Hint Coach: `F1` gives a gentle location hint, `F2` names the technique, `F3` gives a direct move, and `Enter` applies the current direct move if available.
+- Difficulty Analyzer: after solving or generating, the app reports grade, score, hardest technique, step stats, givens, guesses, and backtracks.
+- Import / Export: 81-character puzzle strings use digits `1`-`9` for givens and `0` or `.` for empty cells.
+- Mistake Detection: `K` cycles Off / RuleCheck / SolutionCheck. RuleCheck highlights duplicate row/column/box values; SolutionCheck compares player entries with a cached unique solution.
+- Local Puzzle Library: `Ctrl+S` saves the current puzzle to `data/puzzles.txt`; `L` opens the library view; Up/Down selects entries; Enter loads the selected puzzle.
+
+## v0.2.0 UI Declutter Update
+
+- Command Deck replaces the old button wall. The main panel now shows one selected action, a short description, previous/next controls, and one Execute button.
+- Overlay pages keep low-frequency information out of the main panel: Settings, Analytics, Library, Import/Export, Shortcuts, Generator, and About.
+- Analytics moved into a dedicated drawer with grade, score, technique stats, branch stats, and summary.
+- Settings drawer groups visual settings, solver mode, mistake mode, controls, and version/about information.
+- Library drawer lists saved puzzles and keeps the main board focused.
+- Shortcuts drawer replaces the old crowded bottom help text.
+- Bottom status strip now shows one short message instead of another dense progress/control block.
+
+## Local Puzzle Library Format
+
+The local library is a simple text file:
+
+```text
+data/puzzles.txt
+```
+
+Each puzzle is stored as:
+
+```text
+name|difficulty|puzzleString|solutionString|createdAt|seed
+```
+
+No SQLite or external database is required.
 
 ## Solver Modes
 
@@ -57,6 +94,9 @@ Turbo exact cover constraints:
 - `1`-`9`: enter a digit.
 - `Backspace`, `Delete`, or `0`: clear selected cell.
 - `Space` or `Solve`: solve using current mode.
+- `Tab` / `Shift+Tab`: cycle the Command Deck action.
+- `Enter`: execute the current Command Deck action, or load selected library puzzle when Library drawer is open.
+- Left / Right: step playback when a trace is active; otherwise cycle Command Deck action.
 - `M` or `Mode`: cycle Human Logic / Smart / Turbo.
 - `T` or `Turbo`: switch to Turbo and solve.
 - `H` or `Cand ...`: cycle candidate display through Off / Focused / All.
@@ -66,6 +106,20 @@ Turbo exact cover constraints:
 - `+`, `=`, or keypad `+`: speed up animation.
 - `-`, `_`, or keypad `-`: slow animation.
 - `F11`, `F`, or `Full`: toggle fullscreen/windowed mode.
+- `G` or `Gen`: generate a new puzzle.
+- `Shift+G`: open the Generator drawer.
+- `F1` or `Hint`: gentle hint.
+- `F2` or `Explain`: technique hint.
+- `F3`: direct hint.
+- `Enter` or `Apply`: apply the current hint, or load the selected library puzzle if the library is open.
+- `Import / Export`: open the puzzle string drawer with an in-app text box, paste button, import button, and copy buttons.
+- `Ctrl+I`: import an 81-character puzzle string directly from clipboard.
+- `Ctrl+E` or `Export`: copy current puzzle string.
+- `Ctrl+Shift+E`: copy current solution string.
+- `K` or `Mistake`: cycle mistake detection mode.
+- `Ctrl+S` or `Save`: save current puzzle to local library.
+- `L` or `[LIB]`: open/close the Library drawer.
+- `Up` / `Down`: select a library entry when library view is open.
 - `R` or `Reset`: restore the current puzzle/input snapshot.
 - `C` or `Clear`: clear the board.
 - `N` or `Puzzle`: cycle built-in puzzles.
@@ -93,13 +147,15 @@ Manual build command:
 ```sh
 D:
 cd \Soduku
-set TEMP=D:\Soduku
-set TMP=D:\Soduku
-set TMPDIR=D:\Soduku
-D:/MSYS2/ucrt64/bin/g++.exe -std=c++17 -O2 -Wall -Wextra main.cpp src/Board.cpp src/Solver.cpp src/DLXSolver.cpp src/StepRecorder.cpp src/Layout.cpp src/Animation.cpp src/Renderer.cpp src/App.cpp -o SudokuSolver.exe -ID:/MSYS2/ucrt64/include/SDL2 -LD:/MSYS2/ucrt64/lib -lSDL2 -lSDL2_ttf
+if not exist build_tmp mkdir build_tmp
+set PATH=D:\MSYS2\ucrt64\bin;D:\MSYS2\usr\bin;%PATH%
+set TEMP=D:\Soduku\build_tmp
+set TMP=D:\Soduku\build_tmp
+set TMPDIR=D:\Soduku\build_tmp
+D:/MSYS2/ucrt64/bin/g++.exe -std=c++17 -O2 -Wall -Wextra main.cpp src/Board.cpp src/Solver.cpp src/DLXSolver.cpp src/StepRecorder.cpp src/CommandDeck.cpp src/OverlayPages.cpp src/DifficultyAnalyzer.cpp src/PuzzleIO.cpp src/HintCoach.cpp src/PuzzleGenerator.cpp src/PuzzleLibrary.cpp src/Layout.cpp src/Animation.cpp src/Renderer.cpp src/App.cpp -o SudokuSolver.exe -ID:/MSYS2/ucrt64/include/SDL2 -LD:/MSYS2/ucrt64/lib -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf
 ```
 
-`TEMP`, `TMP`, and `TMPDIR` are set to the project folder because some MSYS2 tools can fail to create temporary object files when the Windows user profile path contains non-ASCII characters.
+`PATH` is set so `g++` can launch its own UCRT64 helper tools. `TEMP`, `TMP`, and `TMPDIR` are set to `build_tmp` because some MSYS2 tools can fail to create temporary object files when the Windows user profile path contains non-ASCII characters.
 
 ## Run
 
@@ -143,12 +199,17 @@ GitHub Pages recommendation:
 3. Commit both `website/` and `docs/`.
 4. In GitHub Pages settings, choose `main` branch and `/docs` folder.
 
-The website currently uses placeholder links:
+The website now points the Windows download button at the latest GitHub Release asset:
 
-- Windows download: `downloads/SudokuReasoningRadar_Windows.zip`
+```text
+https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip
+```
+
+The GitHub repository link placeholder is still:
+
 - GitHub URL: `#github-link-placeholder`
 
-Replace these after you create a real release ZIP or GitHub repository. Do not commit passwords, tokens, cookies, API keys, or private personal files.
+Replace the placeholder after the repository URL is final. Do not commit passwords, tokens, cookies, API keys, or private personal files.
 
 ## Display
 
@@ -156,9 +217,18 @@ The SDL2 window is resizable and uses a real responsive layout instead of fixed 
 
 The visual style is a dark "reasoning radar" dashboard: subdued blueprint lines, neon technique accents, Focused candidate marks, animated scan highlights, a progress timeline, and separated controls so text and buttons do not overlap.
 
+The main interface now uses progressive disclosure. The board and current reasoning focus stay visible, while analytics, settings, library, import/export, and shortcut details open as drawer pages.
+
 ## Current Limits
 
+- v0.2.0 generator uses randomized solved boards plus uniqueness-preserving removal; difficulty targets are practical heuristics, not a full graded generator yet.
+- Hint Coach currently prioritizes the first human-logic placement found by Human Logic Mode.
+- Puzzle library is a simple local text file and does not include search/filter UI yet.
 - X-Wing is implemented for row-based and column-based rectangles, but more exotic fish patterns are not included.
 - Turbo mode focuses on speed and uniqueness detection, not detailed human-style animation.
 - Visual animations are SDL2-based and intentionally lightweight.
 - Human Logic Mode can stop on puzzles that require techniques beyond the implemented set.
+
+## Roadmap
+
+- v0.3.0: WebAssembly browser version, Daily Challenge, advanced generator tuning, richer Hint Coach explanations, puzzle library filters, and deeper difficulty history.

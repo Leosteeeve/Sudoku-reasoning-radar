@@ -1,4 +1,4 @@
-Place the Windows release ZIP here when you are ready to publish a downloadable build.
+Place the Windows release ZIP here if you want a local/static download copy.
 
 Expected file name:
 SudokuReasoningRadar_Windows.zip
@@ -6,6 +6,6 @@ SudokuReasoningRadar_Windows.zip
 The website download button points to:
 downloads/SudokuReasoningRadar_Windows.zip
 
-If you prefer not to commit the ZIP into the repository, upload the ZIP to GitHub Releases and replace the download link in website/index.html and docs/index.html.
+For public releases, the recommended approach is to upload the ZIP to GitHub Releases with the stable asset filename above. The website can then point to the latest release asset URL.
 
 Do not include secrets, passwords, tokens, cookies, or private personal files in release packages.

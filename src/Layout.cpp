@@ -46,10 +46,10 @@ LayoutState computeLayout(int width, int height) {
         return r;
     };
     l.headerBlock = block(44);
-    l.statusBlock = block(82);
+    l.statusBlock = block(96);
     l.puzzleBlock = block(44);
     l.selectedBlock = block(62);
-    const int controlsH = l.compact ? 112 : 190;
+    const int controlsH = l.compact ? 120 : 132;
     const int progressH = 46;
     const int remaining = std::max(96, l.panelRect.y + l.panelRect.h - pad - y - controlsH - progressH - 24);
     l.stepBlock = block(remaining);

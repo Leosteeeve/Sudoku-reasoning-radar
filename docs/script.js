@@ -8,7 +8,12 @@
     const techniques = [
         "Naked Single",
         "Hidden Single",
-        "Locked Candidate",
+        "Hint Coach",
+        "Difficulty Analyzer",
+        "Puzzle Generator",
+        "Command Deck",
+        "Settings Drawer",
+        "Mistake Check",
         "MRV Guess",
         "Backtrack"
     ];

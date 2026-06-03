@@ -15,6 +15,13 @@
                 "src/Solver.cpp",
                 "src/DLXSolver.cpp",
                 "src/StepRecorder.cpp",
+                "src/CommandDeck.cpp",
+                "src/OverlayPages.cpp",
+                "src/DifficultyAnalyzer.cpp",
+                "src/PuzzleIO.cpp",
+                "src/HintCoach.cpp",
+                "src/PuzzleGenerator.cpp",
+                "src/PuzzleLibrary.cpp",
                 "src/Layout.cpp",
                 "src/Animation.cpp",
                 "src/Renderer.cpp",
@@ -23,6 +30,8 @@
                 "SudokuSolver.exe",
                 "-ID:/MSYS2/ucrt64/include/SDL2",
                 "-LD:/MSYS2/ucrt64/lib",
+                "-lmingw32",
+                "-lSDL2main",
                 "-lSDL2",
                 "-lSDL2_ttf"
             ],
@@ -30,9 +39,9 @@
                 "cwd": "${workspaceFolder}",
                 "env": {
                     "PATH": "D:\\MSYS2\\ucrt64\\bin;D:\\MSYS2\\usr\\bin;${env:PATH}",
-                    "TEMP": "D:\\Soduku",
-                    "TMP": "D:\\Soduku",
-                    "TMPDIR": "D:\\Soduku"
+                    "TEMP": "D:\\Soduku\\build_tmp",
+                    "TMP": "D:\\Soduku\\build_tmp",
+                    "TMPDIR": "D:\\Soduku\\build_tmp"
                 }
             },
             "group": {

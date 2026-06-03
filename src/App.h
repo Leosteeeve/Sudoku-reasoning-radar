@@ -1,6 +1,13 @@
 #pragma once
 
 #include "Board.h"
+#include "CommandDeck.h"
+#include "DifficultyAnalyzer.h"
+#include "HintCoach.h"
+#include "OverlayPages.h"
+#include "PuzzleGenerator.h"
+#include "PuzzleIO.h"
+#include "PuzzleLibrary.h"
 #include "Renderer.h"
 #include "Solver.h"
 
@@ -17,6 +24,8 @@ public:
     void shutdown();
 
 private:
+    static constexpr const char* AppVersion = "v0.2.0";
+
     enum class Mode {
         Editing,
         PlayingSteps,
@@ -24,6 +33,20 @@ private:
         NoSolution,
         MultipleSolutions,
         InvalidInput
+    };
+
+    enum class CellSource {
+        Empty,
+        Given,
+        Player,
+        Solver,
+        Hint
+    };
+
+    enum class MistakeMode {
+        Off,
+        RuleCheck,
+        SolutionCheck
     };
 
     struct Puzzle {
@@ -47,6 +70,29 @@ private:
     void loadNextPuzzle();
     void cycleSolverMode();
     void cycleCandidateDisplayMode();
+    void cycleGeneratorDifficulty();
+    void generatePuzzle();
+    void requestHint(HintLevel level);
+    void applyCurrentHint();
+    void cycleMistakeMode();
+    void importPuzzleFromClipboard();
+    void importPuzzleFromTextBox();
+    void pasteClipboardToImportBox();
+    void appendImportText(const std::string& text);
+    void copyCurrentPuzzleString();
+    void copyCurrentSolutionString();
+    void saveCurrentPuzzleToLibrary();
+    void toggleLibraryPanel();
+    void moveLibrarySelection(int delta);
+    void loadSelectedLibraryPuzzle();
+    void analyzeCurrentBoard();
+    void openOverlay(OverlayPage page);
+    void closeOverlay();
+    void cycleCommand(int delta);
+    CommandItem currentCommandItem() const;
+    bool commandEnabled(CommandAction action) const;
+    void executeCurrentCommand();
+    void executeCommand(CommandAction action);
     void adjustSpeed(double factor);
     void toggleAutoPlayback();
     void clearSolutionState();
@@ -62,13 +108,32 @@ private:
     std::string resultText() const;
     std::string solverModeText() const;
     std::string candidateModeText() const;
+    std::string mistakeModeText() const;
+    std::string generatorText() const;
+    std::string hintText() const;
+    std::string difficultyText() const;
+    std::string ioText() const;
+    std::string libraryText() const;
+    std::string focusText() const;
+    std::string shortStatusText() const;
+    std::string overlayBodyText() const;
+    std::vector<std::string> overlayLines() const;
     std::string selectedCellText() const;
     std::string selectedCandidatesText() const;
     int keyToNumber(SDL_Keycode key) const;
     void editSelectedCell(int number);
+    void markAllGivens();
+    void clearCellSources();
+    void updateMistakeDetection();
+    void ensureSolutionCache();
+    std::string puzzleStringPreview() const;
 
     Renderer renderer;
     Solver solver;
+    PuzzleGenerator puzzleGenerator;
+    HintCoach hintCoach;
+    DifficultyAnalyzer difficultyAnalyzer;
+    PuzzleLibrary puzzleLibrary;
     Board editBoard;
     Board initialBoard;
     Board replayBoard;
@@ -76,9 +141,18 @@ private:
     Board finalBoard;
     std::vector<SolveStep> steps;
     std::vector<Puzzle> puzzles;
+    CellSource cellSources[Board::Size][Board::Size] = {};
+    std::vector<CellRef> mistakeCells;
+    Board solutionCache;
+    bool hasSolutionCache = false;
+    Hint currentHint;
+    DifficultyReport difficultyReport;
+    GeneratedPuzzle lastGenerated;
 
     Mode mode = Mode::Editing;
     SolverMode solverMode = SolverMode::Smart;
+    PuzzleDifficulty generatorDifficulty = PuzzleDifficulty::Easy;
+    MistakeMode mistakeMode = MistakeMode::Off;
     SolveResult lastResult = SolveResult::NoSolution;
     bool hasResult = false;
     bool running = true;
@@ -93,7 +167,20 @@ private:
     int mouseX = -1;
     int mouseY = -1;
     int nextPuzzleIndex = 0;
+    int librarySelection = 0;
+    int commandIndex = 5;
     std::string puzzleName = "Custom Empty";
     std::string pressedButtonId;
+    std::string ioStatus = "Ready.";
+    std::string generatorStatus = "Difficulty Easy.";
+    std::string hintStatus = "No hint requested.";
+    std::string libraryStatus = "Library closed.";
+    std::string mistakeStatus = "Mistake detection off.";
+    std::string lastSeed;
+    std::string importTextBuffer;
+    bool libraryVisible = false;
+    bool generating = false;
+    bool importTextEditing = false;
+    OverlayPage currentOverlay = OverlayPage::None;
     Uint32 stepStartedTicks = 0;
 };

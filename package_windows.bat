@@ -4,9 +4,10 @@ setlocal
 cd /d "%~dp0"
 
 set "APP_EXE=SudokuSolver.exe"
+set "APP_VERSION=v0.2.0"
 set "APP_NAME=SudokuReasoningRadar_Windows"
 set "RELEASE_ROOT=release"
-set "RELEASE_DIR=%RELEASE_ROOT%\%APP_NAME%"
+set "RELEASE_DIR=%RELEASE_ROOT%\SudokuReasoningRadar_%APP_VERSION%_Windows"
 set "ZIP_PATH=%RELEASE_ROOT%\%APP_NAME%.zip"
 set "MSYS2_BIN=D:\MSYS2\ucrt64\bin"
 set "WEBSITE_ZIP=website\downloads\%APP_NAME%.zip"
@@ -31,22 +32,33 @@ if errorlevel 1 (
     exit /b 1
 )
 
-echo Copying SDL2 runtime DLLs...
-if exist "%MSYS2_BIN%\SDL2.dll" (
-    copy /Y "%MSYS2_BIN%\SDL2.dll" "%RELEASE_DIR%\SDL2.dll" >nul
-) else (
-    echo WARNING: %MSYS2_BIN%\SDL2.dll was not found.
-)
-
-if exist "%MSYS2_BIN%\SDL2_ttf.dll" (
-    copy /Y "%MSYS2_BIN%\SDL2_ttf.dll" "%RELEASE_DIR%\SDL2_ttf.dll" >nul
-) else (
-    echo WARNING: %MSYS2_BIN%\SDL2_ttf.dll was not found.
-)
+echo Copying SDL2 runtime DLLs and UCRT64 dependencies...
+call :copydll SDL2.dll
+call :copydll SDL2_ttf.dll
+call :copydll libfreetype-6.dll
+call :copydll libharfbuzz-0.dll
+call :copydll libpng16-16.dll
+call :copydll zlib1.dll
+call :copydll libbrotlidec.dll
+call :copydll libbrotlicommon.dll
+call :copydll libbz2-1.dll
+call :copydll libgraphite2.dll
+call :copydll libglib-2.0-0.dll
+call :copydll libintl-8.dll
+call :copydll libiconv-2.dll
+call :copydll libpcre2-8-0.dll
+call :copydll libgcc_s_seh-1.dll
+call :copydll libstdc++-6.dll
+call :copydll libwinpthread-1.dll
 
 if exist "assets" (
     echo Copying assets folder...
     xcopy /E /I /Y "assets" "%RELEASE_DIR%\assets" >nul
+)
+
+if exist "data" (
+    echo Copying data folder...
+    xcopy /E /I /Y "data" "%RELEASE_DIR%\data" >nul
 )
 
 if exist "fonts" (
@@ -65,6 +77,7 @@ if exist "LICENSE.txt" (
 echo Creating release README...
 (
     echo Sudoku Reasoning Radar - Windows Release
+    echo Version %APP_VERSION%
     echo.
     echo Run:
     echo   SudokuSolver.exe
@@ -73,8 +86,9 @@ echo Creating release README...
     echo   SudokuSolver.exe
     echo   SDL2.dll
     echo   SDL2_ttf.dll
+    echo   libfreetype-6.dll and other SDL2_ttf runtime dependencies
     echo.
-    echo If the app does not start, make sure the SDL2 runtime DLLs are next to the executable.
+    echo If the app does not start, make sure every DLL in this folder remains next to the executable.
     echo.
     echo Project website files can be found in website/ and docs/.
 ) > "%RELEASE_DIR%\README_RELEASE.txt"
@@ -114,3 +128,12 @@ echo   %WEBSITE_ZIP%
 echo   %DOCS_ZIP%
 
 endlocal
+exit /b 0
+
+:copydll
+if exist "%MSYS2_BIN%\%~1" (
+    copy /Y "%MSYS2_BIN%\%~1" "%RELEASE_DIR%\%~1" >nul
+) else (
+    echo WARNING: %MSYS2_BIN%\%~1 was not found.
+)
+exit /b 0

@@ -23,6 +23,11 @@ enum class UnitType {
     Box = 3
 };
 
+struct CellRef {
+    int row = -1;
+    int col = -1;
+};
+
 enum class StepType {
     AnalyzeCell,
     RemoveCandidate,

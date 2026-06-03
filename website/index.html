@@ -30,13 +30,13 @@
                 <p class="hero-copy">A visual Sudoku engine that turns hidden logic into motion.</p>
                 <p class="hero-statement">Not just a solver. It visualizes how logic collapses uncertainty into certainty.</p>
                 <div class="hero-actions" aria-label="Primary actions">
-                    <a class="button button-primary" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/download/v0.1.0/SudokuReasoningRadar_Windows.zip" download>
+                    <a class="button button-primary" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
                         Download for Windows
                     </a>
                     <a class="button button-secondary" href="#github-link-placeholder">View on GitHub</a>
                     <a class="button button-ghost" href="#features">See Features</a>
                 </div>
-                <p class="release-note">Windows build coming soon. Place release ZIP in <code>downloads/</code>.</p>
+                <p class="release-note">Latest release: <strong>v0.2.0</strong>. The stable release asset name is <code>SudokuReasoningRadar_Windows.zip</code>.</p>
             </div>
         </section>
 
@@ -176,12 +176,40 @@
                     <p>Switch between focused, full, and hidden candidate displays to control visual density.</p>
                 </article>
                 <article class="feature-card reveal">
-                    <h3>Difficulty Analysis Ready</h3>
-                    <p>The recorded technique stream is prepared for future rating and explanation tools.</p>
+                    <h3>Puzzle Generator</h3>
+                    <p>Create fresh puzzles by difficulty, with uniqueness checks and tracked seed metadata.</p>
                 </article>
                 <article class="feature-card reveal">
-                    <h3>Puzzle Generator Ready</h3>
-                    <p>The solver architecture can support generated puzzles and uniqueness validation.</p>
+                    <h3>Hint Coach</h3>
+                    <p>Ask for gentle, technique, or direct hints without revealing the whole solution path.</p>
+                </article>
+                <article class="feature-card reveal">
+                    <h3>Difficulty Analyzer</h3>
+                    <p>Score puzzles from the recorded solve trace, including hardest technique and branch depth.</p>
+                </article>
+                <article class="feature-card reveal">
+                    <h3>Import / Export Puzzle Strings</h3>
+                    <p>Paste or type standard 81-character Sudoku strings in the in-app drawer, then import or copy puzzles without leaving the tool.</p>
+                </article>
+                <article class="feature-card reveal">
+                    <h3>Mistake Detection</h3>
+                    <p>Highlight rule conflicts or compare player entries against a cached unique solution.</p>
+                </article>
+                <article class="feature-card reveal">
+                    <h3>Local Puzzle Library</h3>
+                    <p>Save generated or imported puzzles locally in a simple text file format.</p>
+                </article>
+                <article class="feature-card reveal">
+                    <h3>Cleaner Command Deck</h3>
+                    <p>Replace the old button wall with one focused action, a short description, and a single Execute control.</p>
+                </article>
+                <article class="feature-card reveal">
+                    <h3>Dedicated Panels</h3>
+                    <p>Settings, analytics, library, import/export, generator, and shortcuts now live in clean drawer pages.</p>
+                </article>
+                <article class="feature-card reveal">
+                    <h3>Reduced Visual Clutter</h3>
+                    <p>The board and current reasoning step stay central while lower-frequency tools stay tucked away.</p>
                 </article>
                 <article class="feature-card reveal">
                     <h3>Fullscreen Responsive UI</h3>
@@ -205,6 +233,7 @@
                         <li>MRV backtracking</li>
                         <li>Exact Cover / Turbo mode</li>
                         <li>Unique, multiple, invalid, and no-solution detection</li>
+                        <li>Generation, hints, analysis, import/export, and local library workflow</li>
                     </ul>
                 </div>
                 <div class="code-panel" aria-label="Algorithm summary">
@@ -226,9 +255,16 @@
                 <span>Watch reasoning steps</span>
                 <span>Step forward and backward</span>
                 <span>Toggle candidate modes</span>
+                <span>Generate unique puzzles</span>
+                <span>Ask for layered hints</span>
+                <span>Analyze difficulty</span>
+                <span>Import/export puzzle strings</span>
+                <span>Check mistakes</span>
+                <span>Save puzzles locally</span>
+                <span>Use the Command Deck</span>
+                <span>Open dedicated overlay panels</span>
                 <span>Switch solving modes</span>
                 <span>Use fullscreen</span>
-                <span>Export/import puzzle strings in future versions</span>
             </div>
         </section>
 
@@ -237,11 +273,11 @@
                 <div>
                     <p class="eyebrow">Download</p>
                     <h2>Windows build</h2>
-                    <p class="version">Version placeholder: <strong>v0.1.0</strong></p>
+                    <p class="version">Latest release: <strong>v0.2.0</strong></p>
                     <p>Requirements: Windows 10/11. SDL2 DLLs should be included in the release package.</p>
-                    <p class="download-note">The release ZIP should be placed in <code>website/downloads</code>, copied to <code>docs/downloads</code>, or attached to a GitHub Release.</p>
+                    <p class="download-note">Formal downloads are recommended through GitHub Releases. Keep the asset filename stable so the latest-release link keeps working.</p>
                 </div>
-                <a class="button button-primary large" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/download/v0.1.0/SudokuReasoningRadar_Windows.zip" download>
+                <a class="button button-primary large" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
                     Download Windows ZIP
                 </a>
             </div>
@@ -253,10 +289,9 @@
                 <h2>Next signals on the radar.</h2>
             </div>
             <div class="roadmap-grid reveal">
-                <span>Puzzle Generator</span>
-                <span>Hint Coach</span>
-                <span>Difficulty Analyzer</span>
-                <span>Mistake Detection</span>
+                <span>Advanced generator tuning</span>
+                <span>Hint Coach explanations</span>
+                <span>Difficulty history</span>
                 <span>WebAssembly browser version</span>
                 <span>Daily Challenge</span>
                 <span>Puzzle Library</span>

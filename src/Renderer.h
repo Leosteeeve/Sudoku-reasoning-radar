@@ -2,6 +2,7 @@
 
 #include "Board.h"
 #include "Layout.h"
+#include "OverlayPages.h"
 #include "StepRecorder.h"
 
 #include <SDL.h>
@@ -26,6 +27,7 @@ enum class CandidateDisplayMode {
 };
 
 struct RenderInfo {
+    std::string versionText;
     std::string solverModeText;
     std::string statusText;
     std::string resultText;
@@ -33,14 +35,34 @@ struct RenderInfo {
     std::string selectedCellText;
     std::string selectedCandidatesText;
     std::string candidateModeText;
+    std::string mistakeModeText;
+    std::string generatorText;
+    std::string hintText;
+    std::string difficultyText;
+    std::string ioText;
+    std::string libraryText;
+    std::string focusText;
+    std::string shortStatusText;
+    std::string commandLabel;
+    std::string commandDescription;
+    std::string overlayTitle;
+    std::string overlayInputText;
+    std::vector<std::string> overlayLines;
+    int commandIndex = 0;
+    int commandTotal = 1;
     int solvingTimeMs = 0;
     int selectedRow = -1;
     int selectedCol = -1;
     bool paused = false;
     bool playing = false;
+    bool commandEnabled = true;
+    bool overlayInputActive = false;
     CandidateDisplayMode candidateMode = CandidateDisplayMode::Focused;
+    OverlayPage overlayPage = OverlayPage::None;
     double speedMultiplier = 1.0;
     Uint32 stepAgeMs = 0;
+    std::vector<CellRef> hintCells;
+    std::vector<CellRef> mistakeCells;
 };
 
 class Renderer {
@@ -78,6 +100,7 @@ private:
                    const RenderInfo& info,
                    const std::vector<UIButton>& buttons);
     void drawTimeline(const std::vector<SolveStep>& steps, int currentStep, const RenderInfo& info);
+    void drawOverlay(const RenderInfo& info, const std::vector<UIButton>& buttons);
     void drawCandidates(const Board& board,
                         int row,
                         int col,

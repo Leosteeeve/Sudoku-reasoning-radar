@@ -50,6 +50,24 @@ void logRuntime(const std::string& message) {
     std::ofstream log("D:/Soduku/sudoku_runtime.log", std::ios::app);
     log << message << "\n";
 }
+
+std::string groupedPuzzleText(const std::string& text) {
+    if (text.empty()) {
+        return "Type or paste an 81-character puzzle string here.";
+    }
+
+    std::string grouped;
+    grouped.reserve(text.size() + 20);
+    for (size_t i = 0; i < text.size(); ++i) {
+        grouped.push_back(text[i]);
+        if ((i + 1) % 9 == 0) {
+            grouped.push_back('\n');
+        } else if ((i + 1) % 3 == 0) {
+            grouped.push_back(' ');
+        }
+    }
+    return grouped;
+}
 }
 
 Renderer::Renderer() = default;
@@ -144,6 +162,8 @@ void Renderer::render(const Board& board,
     drawBoard(board, current, info);
     drawPanel(steps, currentStep, info, buttons);
     drawTimeline(steps, currentStep, info);
+    drawOverlay(info, buttons);
+    drawButtons(buttons);
 
     SDL_RenderPresent(sdlRenderer);
 }
@@ -167,30 +187,49 @@ void Renderer::layoutButtons(std::vector<UIButton>& buttons,
         return;
     }
 
-    const SDL_Rect block = layout.controlsBlock;
-    const int gap = std::clamp(block.w / 44, 7, 12);
-    int columns = 1;
-    if (block.w >= 680) {
-        columns = 4;
-    } else if (block.w >= 440) {
-        columns = 3;
-    } else if (block.w >= 270) {
-        columns = 2;
-    }
-
-    const int rows = static_cast<int>((buttons.size() + columns - 1) / columns);
-    const int buttonH = std::clamp((block.h - gap * (rows - 1)) / std::max(1, rows), 30, 42);
-    const int buttonW = (block.w - gap * (columns - 1)) / columns;
-    const int usedH = rows * buttonH + (rows - 1) * gap;
-    const int startY = block.y + std::max(0, (block.h - usedH) / 2);
-
+    const int gap = 8;
+    const int iconH = 28;
+    const int iconW = 48;
+    int iconX = layout.headerBlock.x + layout.headerBlock.w - iconW;
+    const int iconY = layout.headerBlock.y + 2;
+    const SDL_Rect deck = layout.controlsBlock;
+    const int sideW = std::clamp(deck.w / 6, 42, 58);
+    const int execH = std::clamp(deck.h / 3, 34, 44);
+    const int selectorH = std::clamp(deck.h / 3, 34, 44);
+    const int selectorY = deck.y + 8;
+    const int execY = selectorY + selectorH + 10;
+    const int drawerW = std::clamp(layout.width / 3, 420, 520);
+    const SDL_Rect drawer{layout.width - drawerW - layout.safe / 2,
+                          layout.safe / 2,
+                          drawerW,
+                          layout.height - layout.safe};
+    const int drawerPad = std::clamp(drawer.w / 24, 18, 26);
+    const int actionGap = 10;
+    const int actionH = 34;
+    const int actionW = (drawer.w - drawerPad * 2 - actionGap) / 2;
+    const int actionRow2Y = drawer.y + drawer.h - drawerPad - actionH;
+    const int actionRow1Y = actionRow2Y - actionGap - actionH;
     for (size_t i = 0; i < buttons.size(); ++i) {
-        const int row = static_cast<int>(i) / columns;
-        const int col = static_cast<int>(i) % columns;
-        buttons[i].rect = SDL_Rect{block.x + col * (buttonW + gap),
-                                   startY + row * (buttonH + gap),
-                                   buttonW,
-                                   buttonH};
+        if (buttons[i].id.rfind("icon_", 0) == 0) {
+            buttons[i].rect = SDL_Rect{iconX, iconY, iconW, iconH};
+            iconX -= iconW + gap;
+        } else if (buttons[i].id == "deck_prev") {
+            buttons[i].rect = SDL_Rect{deck.x, selectorY, sideW, selectorH};
+        } else if (buttons[i].id == "deck_next") {
+            buttons[i].rect = SDL_Rect{deck.x + deck.w - sideW, selectorY, sideW, selectorH};
+        } else if (buttons[i].id == "deck_exec") {
+            buttons[i].rect = SDL_Rect{deck.x, execY, deck.w, execH};
+        } else if (buttons[i].id == "overlay_close") {
+            buttons[i].rect = SDL_Rect{drawer.x + drawer.w - drawerPad - 86, drawer.y + 18, 86, 30};
+        } else if (buttons[i].id == "overlay_paste_clipboard") {
+            buttons[i].rect = SDL_Rect{drawer.x + drawerPad, actionRow1Y, actionW, actionH};
+        } else if (buttons[i].id == "overlay_import_text") {
+            buttons[i].rect = SDL_Rect{drawer.x + drawerPad + actionW + actionGap, actionRow1Y, actionW, actionH};
+        } else if (buttons[i].id == "overlay_copy_puzzle") {
+            buttons[i].rect = SDL_Rect{drawer.x + drawerPad, actionRow2Y, actionW, actionH};
+        } else if (buttons[i].id == "overlay_copy_solution") {
+            buttons[i].rect = SDL_Rect{drawer.x + drawerPad + actionW + actionGap, actionRow2Y, actionW, actionH};
+        }
         buttons[i].hovered = buttons[i].enabled && pointInRect(mouseX, mouseY, buttons[i].rect);
         buttons[i].pressed = buttons[i].enabled && buttons[i].id == pressedId;
     }
@@ -326,6 +365,18 @@ void Renderer::drawBoard(const Board& board, const SolveStep* current, const Ren
         fillRect(cellRect(current->row2, current->col2), color(217, 70, 239, 68));
     }
 
+    for (const CellRef& ref : info.hintCells) {
+        if (Board::isInside(ref.row, ref.col)) {
+            fillRect(cellRect(ref.row, ref.col), color(250, 204, 21, 38));
+        }
+    }
+    for (const CellRef& ref : info.mistakeCells) {
+        if (Board::isInside(ref.row, ref.col)) {
+            fillRect(cellRect(ref.row, ref.col), color(248, 113, 113, 92));
+            strokeRect(cellRect(ref.row, ref.col), color(248, 113, 113, 235), std::max(2, layout.cellSize / 28));
+        }
+    }
+
     for (int r = 0; r < Board::Size; ++r) {
         for (int c = 0; c < Board::Size; ++c) {
             const int value = board.getCell(r, c);
@@ -392,34 +443,35 @@ void Renderer::drawPanel(const std::vector<SolveStep>& steps,
     const Theme& theme = appTheme();
     const SDL_Rect panel = layout.panelRect;
     fillRect(panel, theme.panelSurface);
-    strokeRect(panel, theme.panelBorder, 1);
+    strokeRect(panel, color(theme.panelBorder.r, theme.panelBorder.g, theme.panelBorder.b, 120), 1);
 
     drawText("Sudoku Reasoning Radar", layout.headerBlock.x, layout.headerBlock.y, fontMedium, theme.textPrimary);
-    drawLine(layout.headerBlock.x,
-             layout.headerBlock.y + layout.headerBlock.h - 4,
-             layout.headerBlock.x + layout.headerBlock.w,
-             layout.headerBlock.y + layout.headerBlock.h - 4,
-             withAlpha(theme.accent, 85),
-             1);
+    if (!info.versionText.empty()) {
+        drawText(info.versionText,
+                 layout.headerBlock.x,
+                 layout.headerBlock.y + 30,
+                 fontSmall,
+                 theme.accent);
+    }
 
     SDL_Rect row = layout.statusBlock;
-    const int rowH = std::max(24, row.h / 3);
+    const int rowH = std::max(20, row.h / 5);
     drawLabelValue("Mode", info.solverModeText, SDL_Rect{row.x, row.y, row.w, rowH}, theme.textPrimary);
     drawLabelValue("Status", info.statusText, SDL_Rect{row.x, row.y + rowH, row.w, rowH}, theme.accent);
-    drawLabelValue("Candidates", info.candidateModeText, SDL_Rect{row.x, row.y + rowH * 2, row.w, rowH}, theme.textPrimary);
+    drawLabelValue("Puzzle", info.puzzleName, SDL_Rect{row.x, row.y + rowH * 2, row.w, rowH}, theme.textPrimary);
+    drawLabelValue("Difficulty", info.difficultyText, SDL_Rect{row.x, row.y + rowH * 3, row.w, rowH}, theme.textPrimary);
+    drawLabelValue("Mistakes", info.mistakeModeText, SDL_Rect{row.x, row.y + rowH * 4, row.w, rowH}, theme.textPrimary);
 
-    drawLabelValue("Puzzle", info.puzzleName, layout.puzzleBlock, theme.textPrimary);
-
-    const int selectedRowH = std::max(24, layout.selectedBlock.h / 2);
+    const int selectedRowH = std::max(24, layout.puzzleBlock.h / 2);
     drawLabelValue("Selected",
                    info.selectedCellText,
-                   SDL_Rect{layout.selectedBlock.x, layout.selectedBlock.y, layout.selectedBlock.w, selectedRowH},
+                   SDL_Rect{layout.puzzleBlock.x, layout.puzzleBlock.y, layout.puzzleBlock.w, selectedRowH},
                    theme.textPrimary);
     drawLabelValue("Cell Cand.",
                    info.selectedCandidatesText,
-                   SDL_Rect{layout.selectedBlock.x,
-                            layout.selectedBlock.y + selectedRowH,
-                            layout.selectedBlock.w,
+                   SDL_Rect{layout.puzzleBlock.x,
+                            layout.puzzleBlock.y + selectedRowH,
+                            layout.puzzleBlock.w,
                             selectedRowH},
                    theme.textPrimary);
 
@@ -432,86 +484,32 @@ void Renderer::drawPanel(const std::vector<SolveStep>& steps,
                        stepPanel.w - inset * 2,
                        stepPanel.h - inset * 2};
 
+    drawText("Focus", stepInner.x, stepInner.y, fontSmall, theme.textSecondary);
+    int y = stepInner.y + 24;
+    y = drawWrappedText(info.focusText,
+                        SDL_Rect{stepInner.x, y, stepInner.w, std::max(52, stepInner.h - 38)},
+                        fontBody,
+                        theme.textPrimary,
+                        5,
+                        4);
+
     if (!steps.empty() && currentStep >= 0 && currentStep < static_cast<int>(steps.size())) {
         const SolveStep& step = steps[static_cast<size_t>(currentStep)];
         const SDL_Color accent = accentForStep(step.type);
-        int y = stepInner.y;
-        y = drawWrappedText(describeStep(step, currentStep, static_cast<int>(steps.size())),
-                            SDL_Rect{stepInner.x, y, stepInner.w, 54},
-                            fontBody,
-                            accent,
-                            3,
-                            2);
-        y += 8;
-        drawText("Reason", stepInner.x, y, fontSmall, theme.textSecondary);
-        y += 22;
-
-        int reservedBottom = 0;
-        if (step.depth > 0) {
-            reservedBottom += 30;
-        }
-        if (step.type == StepType::Contradiction || step.type == StepType::Backtrack) {
-            reservedBottom += 40;
-        }
-        if (!info.resultText.empty()) {
-            reservedBottom += 44;
-        }
-
-        const SDL_Rect reasonRect{stepInner.x,
-                                  y,
-                                  stepInner.w,
-                                  std::max(40, stepInner.y + stepInner.h - y - reservedBottom)};
-        drawWrappedText(step.reason.empty() ? "Solver recorded this step." : step.reason,
-                        reasonRect,
-                        fontBody,
-                        theme.textPrimary,
-                        5);
-
-        int bottomY = stepInner.y + stepInner.h - reservedBottom;
-        if (!info.resultText.empty()) {
-            bottomY = drawWrappedText(info.resultText,
-                                      SDL_Rect{stepInner.x, bottomY, stepInner.w, 42},
-                                      fontSmall,
-                                      theme.textSecondary,
-                                      3,
-                                      2);
-            bottomY += 6;
-        }
+        drawWrappedText(describeStep(step, currentStep, static_cast<int>(steps.size())),
+                        SDL_Rect{stepInner.x, y + 8, stepInner.w, 36},
+                        fontSmall,
+                        accent,
+                        3,
+                        1);
         if (step.depth > 0) {
             std::ostringstream depth;
             depth << "Assumption Depth: " << step.depth;
-            drawText(depth.str(), stepInner.x, bottomY, fontBody, theme.guess);
-            bottomY += 30;
+            drawText(depth.str(), stepInner.x, stepInner.y + stepInner.h - 24, fontSmall, theme.guess);
         }
-        if (step.type == StepType::Contradiction || step.type == StepType::Backtrack) {
-            const bool backtrack = step.type == StepType::Backtrack;
-            const SDL_Rect warn{stepInner.x, bottomY, stepInner.w, 32};
-            fillRect(warn, backtrack ? color(51, 65, 85, 210) : color(127, 29, 29, 220));
-            strokeRect(warn, backtrack ? theme.backtrack : theme.danger, 1);
-            drawCenteredText(backtrack ? "Branch failed, reverting assumption." : "Contradiction detected in this branch.",
-                             warn,
-                             fontSmall,
-                             color(254, 226, 226));
-        }
-    } else {
-        int y = drawWrappedText("Step 0: Ready",
-                                SDL_Rect{stepInner.x, stepInner.y, stepInner.w, 38},
-                                fontBody,
-                                theme.textPrimary,
-                                3,
-                                1);
-        y += 12;
-        drawWrappedText("Enter a puzzle or load a built-in puzzle, then solve.",
-                        SDL_Rect{stepInner.x, y, stepInner.w, stepInner.h - (y - stepInner.y)},
-                        fontBody,
-                        theme.textSecondary,
-                        5);
     }
 
-    std::ostringstream stats;
-    stats << "Time " << info.solvingTimeMs << " ms   Speed "
-          << static_cast<int>(info.speedMultiplier * 100.0 + 0.5) / 100.0 << "x";
-    drawText(stats.str(), layout.progressBlock.x, layout.progressBlock.y, fontSmall, theme.textSecondary);
+    drawText("Progress", layout.progressBlock.x, layout.progressBlock.y, fontSmall, theme.textSecondary);
     if (!steps.empty()) {
         const SDL_Rect progressBg{layout.progressBlock.x,
                                   layout.progressBlock.y + layout.progressBlock.h - 14,
@@ -524,49 +522,148 @@ void Renderer::drawPanel(const std::vector<SolveStep>& steps,
         SDL_Rect progressFill = progressBg;
         progressFill.w = static_cast<int>(progressBg.w * std::clamp(progress, 0.0, 1.0));
         fillRect(progressFill, accentForStep(steps[static_cast<size_t>(std::max(0, currentStep))].type));
+        std::ostringstream label;
+        label << "Step " << std::max(0, currentStep + 1) << " / " << steps.size();
+        drawText(label.str(), layout.progressBlock.x + 72, layout.progressBlock.y, fontSmall, theme.textPrimary);
+    } else {
+        drawText("Step 0 / 0", layout.progressBlock.x + 72, layout.progressBlock.y, fontSmall, theme.textPrimary);
     }
 
-    drawButtons(buttons);
+    const SDL_Rect deck = layout.controlsBlock;
+    fillRect(deck, color(8, 13, 25, 118));
+    strokeRect(deck, color(71, 85, 105, 92), 1);
+    const int deckInset = std::clamp(deck.w / 28, 10, 16);
+    const SDL_Rect labelRect{deck.x + deckInset + 54, deck.y + 9, deck.w - deckInset * 2 - 108, 42};
+    drawCenteredText(info.commandLabel, labelRect, fontBody, info.commandEnabled ? theme.textPrimary : theme.textMuted);
+    std::ostringstream index;
+    index << info.commandIndex << "/" << info.commandTotal;
+    drawText(index.str(), deck.x + deckInset, deck.y + 62, fontSmall, theme.textSecondary);
+    drawWrappedText(info.commandDescription,
+                    SDL_Rect{deck.x + deckInset + 44, deck.y + 58, deck.w - deckInset * 2 - 44, 54},
+                    fontSmall,
+                    theme.textSecondary,
+                    3,
+                    2);
+
+    (void)buttons;
 }
 
 void Renderer::drawTimeline(const std::vector<SolveStep>& steps, int currentStep, const RenderInfo& info) {
     const Theme& theme = appTheme();
     const SDL_Rect lineRect = layout.timelineRect;
-    fillRect(lineRect, color(8, 13, 25, 154));
-    strokeRect(lineRect, color(71, 85, 105, 95), 1);
-
+    (void)steps;
+    (void)currentStep;
+    fillRect(lineRect, color(8, 13, 25, 104));
     const int pad = std::clamp(lineRect.w / 64, 12, 20);
-    const SDL_Rect bar{lineRect.x + pad,
-                       lineRect.y + lineRect.h / 2 - 4,
-                       lineRect.w - pad * 2,
-                       8};
-    fillRect(bar, color(30, 41, 59, 255));
+    drawWrappedText(info.shortStatusText.empty() ? info.statusText : info.shortStatusText,
+                    SDL_Rect{lineRect.x + pad, lineRect.y + 9, lineRect.w - pad * 2, lineRect.h - 12},
+                    fontSmall,
+                    theme.textSecondary,
+                    2,
+                    1);
+}
 
-    if (steps.empty()) {
-        drawText(info.statusText, lineRect.x + pad, lineRect.y + 10, fontSmall, theme.textSecondary);
+void Renderer::drawOverlay(const RenderInfo& info, const std::vector<UIButton>& buttons) {
+    if (info.overlayPage == OverlayPage::None) {
         return;
     }
 
-    const int segmentCount = std::max(1, std::min(static_cast<int>(steps.size()), std::max(1, bar.w / 4)));
-    for (int i = 0; i < segmentCount; ++i) {
-        const int stepIndex = static_cast<int>((static_cast<long long>(i) * steps.size()) / segmentCount);
-        SDL_Rect segment{bar.x + (bar.w * i) / segmentCount,
-                         bar.y,
-                         std::max(2, bar.w / segmentCount),
-                         bar.h};
-        const SDL_Color c = accentForStep(steps[static_cast<size_t>(stepIndex)].type);
-        fillRect(segment, color(c.r, c.g, c.b, 175));
+    const Theme& theme = appTheme();
+    const int drawerW = std::clamp(layout.width / 3, 420, 520);
+    const SDL_Rect scrim{0, 0, layout.width, layout.height};
+    const SDL_Rect drawer{layout.width - drawerW - layout.safe / 2,
+                          layout.safe / 2,
+                          drawerW,
+                          layout.height - layout.safe};
+    fillRect(scrim, color(0, 0, 0, 126));
+    fillRect(drawer, color(7, 14, 15, 248));
+    strokeRect(drawer, color(theme.accent.r, theme.accent.g, theme.accent.b, 170), 1);
+
+    const int pad = std::clamp(drawer.w / 24, 18, 26);
+    int y = drawer.y + pad;
+    const int titleRightReserve = 112;
+    drawWrappedText(info.overlayTitle.empty() ? "Panel" : info.overlayTitle,
+                    SDL_Rect{drawer.x + pad, y, drawer.w - pad * 2 - titleRightReserve, 40},
+                    fontMedium,
+                    theme.textPrimary,
+                    2,
+                    1);
+    y += 44;
+    drawLine(drawer.x + pad, y, drawer.x + drawer.w - pad, y, color(theme.accent.r, theme.accent.g, theme.accent.b, 80), 1);
+    y += 18;
+
+    const int contentW = drawer.w - pad * 2;
+    const bool hasBottomActions = std::any_of(buttons.begin(), buttons.end(), [](const UIButton& button) {
+        return button.id.rfind("overlay_", 0) == 0 && button.id != "overlay_close";
+    });
+    const int actionReserve = hasBottomActions ? 92 : 0;
+    const int contentBottom = drawer.y + drawer.h - pad - actionReserve;
+
+    if (info.overlayPage == OverlayPage::ImportExport) {
+        drawText("Puzzle String Input", drawer.x + pad, y, fontSmall, theme.accent);
+        y += 25;
+
+        const int inputH = std::clamp(drawer.h / 5, 118, 160);
+        SDL_Rect inputRect{drawer.x + pad, y, contentW, inputH};
+        fillRect(inputRect, color(4, 10, 11, 238));
+        strokeRect(inputRect,
+                   info.overlayInputActive ? theme.warning : color(theme.accent.r, theme.accent.g, theme.accent.b, 120),
+                   info.overlayInputActive ? 2 : 1);
+
+        std::ostringstream count;
+        count << info.overlayInputText.size() << " / 81";
+        drawText(count.str(), inputRect.x + inputRect.w - 72, inputRect.y + 8, fontSmall, theme.textSecondary);
+
+        const std::string display = groupedPuzzleText(info.overlayInputText);
+        drawWrappedText(display,
+                        SDL_Rect{inputRect.x + 12, inputRect.y + 34, inputRect.w - 24, inputRect.h - 44},
+                        fontSmall,
+                        info.overlayInputText.empty() ? theme.textMuted : theme.textPrimary,
+                        3,
+                        6);
+        y += inputRect.h + 16;
     }
 
-    if (currentStep >= 0) {
-        const double progress = static_cast<double>(currentStep + 1) / static_cast<double>(steps.size());
-        const int markerX = bar.x + static_cast<int>(bar.w * std::clamp(progress, 0.0, 1.0));
-        drawLine(markerX, bar.y - 9, markerX, bar.y + bar.h + 9, theme.warning, 2);
+    for (const std::string& line : info.overlayLines) {
+        if (y > contentBottom - 20) {
+            drawText("...", drawer.x + pad, y, fontSmall, theme.textMuted);
+            break;
+        }
+        if (line.empty()) {
+            y += 10;
+            continue;
+        }
+
+        const bool heading = line.find(':') == std::string::npos && line.size() < 24;
+        if (heading) {
+            y += 6;
+            drawText(line, drawer.x + pad, y, fontSmall, theme.accent);
+            y += 25;
+            continue;
+        }
+
+        SDL_Rect card{drawer.x + pad, y, contentW, 48};
+        fillRect(card, color(14, 24, 25, 150));
+        strokeRect(card, color(71, 85, 105, 88), 1);
+        const int usedY = drawWrappedText(line,
+                                          SDL_Rect{card.x + 12, card.y + 9, card.w - 24, card.h - 12},
+                                          fontSmall,
+                                          theme.textSecondary,
+                                          2,
+                                          2);
+        y += std::max(48, usedY - card.y + 12) + 8;
     }
 
-    std::ostringstream label;
-    label << "Step " << std::max(0, currentStep + 1) << " / " << steps.size();
-    drawText(label.str(), lineRect.x + pad, lineRect.y + 8, fontSmall, theme.textPrimary);
+    if (hasBottomActions) {
+        const int actionY = drawer.y + drawer.h - pad - 82;
+        drawLine(drawer.x + pad,
+                 actionY - 12,
+                 drawer.x + drawer.w - pad,
+                 actionY - 12,
+                 color(theme.accent.r, theme.accent.g, theme.accent.b, 58),
+                 1);
+        drawText("Actions", drawer.x + pad, actionY - 34, fontSmall, theme.textSecondary);
+    }
 }
 
 void Renderer::drawCandidates(const Board& board,
@@ -688,7 +785,7 @@ void Renderer::drawButtons(const std::vector<UIButton>& buttons) {
 
         fillRect(rect, bg);
         strokeRect(rect, border, button.hovered && button.enabled ? 2 : 1);
-        drawCenteredText(button.label, rect, fontBody, text);
+        drawCenteredText(button.label, rect, rect.h <= 30 ? fontSmall : fontBody, text);
     }
 }
 

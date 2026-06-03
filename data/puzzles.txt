@@ -1,0 +1,3 @@
+# Local Sudoku Reasoning Radar puzzle library
+# Format:
+# name|difficulty|puzzleString|solutionString|createdAt|seed

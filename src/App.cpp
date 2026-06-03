@@ -1,6 +1,7 @@
 #include "App.h"
 
 #include <algorithm>
+#include <cctype>
 #include <iomanip>
 #include <sstream>
 
@@ -16,6 +17,23 @@ std::array<std::array<int, Board::Size>, Board::Size> puzzleFromRows(
         ++r;
     }
     return grid;
+}
+
+std::string sanitizePuzzleEntryText(const std::string& text) {
+    std::string compact;
+    compact.reserve(81);
+    for (unsigned char ch : text) {
+        if (std::isspace(ch)) {
+            continue;
+        }
+        if ((ch >= '0' && ch <= '9') || ch == '.') {
+            compact.push_back(static_cast<char>(ch));
+        }
+        if (compact.size() >= 81) {
+            break;
+        }
+    }
+    return compact;
 }
 }
 
@@ -93,6 +111,10 @@ bool App::initialize() {
     initialBoard = editBoard;
     replayBoard = editBoard;
     resetSnapshot = editBoard;
+    finalBoard.clear();
+    solutionCache.clear();
+    clearCellSources();
+    puzzleLibrary.load(&libraryStatus);
 
     return renderer.initialize();
 }
@@ -123,6 +145,12 @@ void App::handleEvent(const SDL_Event& event) {
         mouseY = event.motion.y;
         return;
     }
+    if (event.type == SDL_TEXTINPUT) {
+        if (currentOverlay == OverlayPage::ImportExport && importTextEditing) {
+            appendImportText(event.text.text);
+        }
+        return;
+    }
     if (event.type == SDL_KEYDOWN) {
         handleKeyDown(event.key.keysym.sym);
         return;
@@ -137,8 +165,96 @@ void App::handleEvent(const SDL_Event& event) {
 }
 
 void App::handleKeyDown(SDL_Keycode key) {
+    const SDL_Keymod mods = SDL_GetModState();
+    const bool ctrl = (mods & KMOD_CTRL) != 0;
+    const bool shift = (mods & KMOD_SHIFT) != 0;
+
     if (key == SDLK_ESCAPE) {
-        running = false;
+        if (currentOverlay != OverlayPage::None) {
+            closeOverlay();
+        } else {
+            running = false;
+        }
+        return;
+    }
+    if (currentOverlay == OverlayPage::ImportExport && importTextEditing) {
+        if (ctrl && key == SDLK_v) {
+            pasteClipboardToImportBox();
+        } else if (key == SDLK_BACKSPACE) {
+            if (!importTextBuffer.empty()) {
+                importTextBuffer.pop_back();
+                ioStatus = "Import text edited.";
+            }
+        } else if (key == SDLK_DELETE) {
+            importTextBuffer.clear();
+            ioStatus = "Import text cleared.";
+        } else if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+            importPuzzleFromTextBox();
+        }
+        return;
+    }
+    if (key == SDLK_TAB) {
+        cycleCommand(shift ? -1 : 1);
+        return;
+    }
+    if (ctrl && key == SDLK_i) {
+        importPuzzleFromClipboard();
+        return;
+    }
+    if (ctrl && key == SDLK_e) {
+        if (shift) {
+            copyCurrentSolutionString();
+        } else {
+            copyCurrentPuzzleString();
+        }
+        return;
+    }
+    if (ctrl && key == SDLK_s) {
+        saveCurrentPuzzleToLibrary();
+        return;
+    }
+    if (key == SDLK_F1) {
+        requestHint(HintLevel::Gentle);
+        return;
+    }
+    if (key == SDLK_F2) {
+        requestHint(HintLevel::Technique);
+        return;
+    }
+    if (key == SDLK_F3) {
+        requestHint(HintLevel::Direct);
+        return;
+    }
+    if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+        if (currentOverlay == OverlayPage::Library && libraryVisible) {
+            loadSelectedLibraryPuzzle();
+        } else {
+            executeCurrentCommand();
+        }
+        return;
+    }
+    if (key == SDLK_g) {
+        if (shift) {
+            openOverlay(OverlayPage::Generator);
+        } else {
+            generatePuzzle();
+        }
+        return;
+    }
+    if (key == SDLK_k) {
+        cycleMistakeMode();
+        return;
+    }
+    if (key == SDLK_l) {
+        toggleLibraryPanel();
+        return;
+    }
+    if (key == SDLK_UP && libraryVisible) {
+        moveLibrarySelection(-1);
+        return;
+    }
+    if (key == SDLK_DOWN && libraryVisible) {
+        moveLibrarySelection(1);
         return;
     }
     if (key == SDLK_SPACE) {
@@ -165,16 +281,36 @@ void App::handleKeyDown(SDL_Keycode key) {
         toggleAutoPlayback();
         return;
     }
-    if (key == SDLK_s || key == SDLK_RIGHT) {
+    if (key == SDLK_s) {
         paused = true;
         playing = false;
         advanceStep();
         return;
     }
-    if (key == SDLK_b || key == SDLK_LEFT) {
+    if (key == SDLK_RIGHT) {
+        if (!steps.empty() && currentStep + 1 < static_cast<int>(steps.size())) {
+            paused = true;
+            playing = false;
+            advanceStep();
+        } else {
+            cycleCommand(1);
+        }
+        return;
+    }
+    if (key == SDLK_b) {
         paused = true;
         playing = false;
         retreatStep();
+        return;
+    }
+    if (key == SDLK_LEFT) {
+        if (!steps.empty() && currentStep > -1) {
+            paused = true;
+            playing = false;
+            retreatStep();
+        } else {
+            cycleCommand(-1);
+        }
         return;
     }
     if (key == SDLK_EQUALS || key == SDLK_PLUS || key == SDLK_KP_PLUS) {
@@ -213,6 +349,17 @@ void App::handleMouseDown(int x, int y) {
     mouseY = y;
     pressedButtonId.clear();
 
+    const std::vector<UIButton> buttons = makeButtons();
+    const UIButton* button = hitButton(x, y, buttons);
+    if (button && button->enabled) {
+        pressedButtonId = button->id;
+        return;
+    }
+
+    if (currentOverlay != OverlayPage::None) {
+        return;
+    }
+
     int row = -1;
     int col = -1;
     if (renderer.cellFromPoint(x, y, row, col)) {
@@ -220,14 +367,6 @@ void App::handleMouseDown(int x, int y) {
         selectedCol = col;
         return;
     }
-
-    const std::vector<UIButton> buttons = makeButtons();
-    const UIButton* button = hitButton(x, y, buttons);
-    if (!button || !button->enabled) {
-        return;
-    }
-
-    pressedButtonId = button->id;
 }
 
 void App::handleMouseUp(int x, int y) {
@@ -249,7 +388,31 @@ void App::handleMouseUp(int x, int y) {
 }
 
 void App::activateButton(const std::string& id) {
-    if (id == "solve") {
+    if (id == "deck_prev") {
+        cycleCommand(-1);
+    } else if (id == "deck_next") {
+        cycleCommand(1);
+    } else if (id == "deck_exec") {
+        executeCurrentCommand();
+    } else if (id == "icon_settings") {
+        openOverlay(OverlayPage::Settings);
+    } else if (id == "icon_analytics") {
+        openOverlay(OverlayPage::Analytics);
+    } else if (id == "icon_library") {
+        openOverlay(OverlayPage::Library);
+    } else if (id == "icon_help") {
+        openOverlay(OverlayPage::Shortcuts);
+    } else if (id == "overlay_close") {
+        closeOverlay();
+    } else if (id == "overlay_import_text") {
+        importPuzzleFromTextBox();
+    } else if (id == "overlay_paste_clipboard") {
+        pasteClipboardToImportBox();
+    } else if (id == "overlay_copy_puzzle") {
+        copyCurrentPuzzleString();
+    } else if (id == "overlay_copy_solution") {
+        copyCurrentSolutionString();
+    } else if (id == "solve") {
         startSolve();
     } else if (id == "mode") {
         cycleSolverMode();
@@ -275,6 +438,26 @@ void App::activateButton(const std::string& id) {
         cycleCandidateDisplayMode();
     } else if (id == "full") {
         renderer.toggleFullscreen();
+    } else if (id == "generate") {
+        generatePuzzle();
+    } else if (id == "difficulty") {
+        cycleGeneratorDifficulty();
+    } else if (id == "hint") {
+        requestHint(HintLevel::Gentle);
+    } else if (id == "explain") {
+        requestHint(HintLevel::Technique);
+    } else if (id == "applyhint") {
+        applyCurrentHint();
+    } else if (id == "import") {
+        importPuzzleFromClipboard();
+    } else if (id == "export") {
+        copyCurrentPuzzleString();
+    } else if (id == "save") {
+        saveCurrentPuzzleToLibrary();
+    } else if (id == "library") {
+        toggleLibraryPanel();
+    } else if (id == "mistake") {
+        cycleMistakeMode();
     }
 }
 
@@ -289,7 +472,9 @@ void App::update() {
 }
 
 void App::render() {
+    updateMistakeDetection();
     RenderInfo info;
+    info.versionText = AppVersion;
     info.solverModeText = solverModeText();
     info.statusText = statusText();
     info.resultText = resultText();
@@ -297,6 +482,25 @@ void App::render() {
     info.selectedCellText = selectedCellText();
     info.selectedCandidatesText = selectedCandidatesText();
     info.candidateModeText = candidateModeText();
+    info.mistakeModeText = mistakeModeText();
+    info.generatorText = generatorText();
+    info.hintText = hintText();
+    info.difficultyText = difficultyText();
+    info.ioText = ioText();
+    info.libraryText = libraryText();
+    info.focusText = focusText();
+    info.shortStatusText = shortStatusText();
+    const CommandItem command = currentCommandItem();
+    info.commandLabel = command.label;
+    info.commandDescription = command.description;
+    info.commandEnabled = command.enabled;
+    info.commandIndex = commandIndex + 1;
+    info.commandTotal = CommandDeck::count();
+    info.overlayPage = currentOverlay;
+    info.overlayTitle = overlayTitle(currentOverlay);
+    info.overlayInputText = importTextBuffer;
+    info.overlayInputActive = currentOverlay == OverlayPage::ImportExport && importTextEditing;
+    info.overlayLines = overlayLines();
     info.solvingTimeMs = lastSolveMs;
     info.selectedRow = selectedRow;
     info.selectedCol = selectedCol;
@@ -305,6 +509,8 @@ void App::render() {
     info.candidateMode = candidateDisplayMode;
     info.speedMultiplier = speedMultiplier;
     info.stepAgeMs = SDL_GetTicks() - stepStartedTicks;
+    info.hintCells = currentHint.highlightedCells;
+    info.mistakeCells = mistakeCells;
     renderer.render(replayBoard, steps, currentStep, info, makeButtons());
 }
 
@@ -329,6 +535,11 @@ void App::startSolve() {
     hasResult = true;
     finalBoard = solver.getFinalBoard();
     steps = solver.getSteps();
+    difficultyReport = difficultyAnalyzer.analyze(initialBoard, lastResult, steps);
+    hasSolutionCache = lastResult == SolveResult::SolvedUnique && finalBoard.isSolved();
+    if (hasSolutionCache) {
+        solutionCache = finalBoard;
+    }
 
     if (!steps.empty()) {
         advanceStep();
@@ -348,10 +559,16 @@ void App::clearBoard() {
     initialBoard = editBoard;
     replayBoard = editBoard;
     resetSnapshot = editBoard;
+    finalBoard.clear();
+    solutionCache.clear();
+    hasSolutionCache = false;
+    clearCellSources();
     puzzleName = "Custom Empty";
     selectedRow = -1;
     selectedCol = -1;
     lastSolveMs = 0;
+    ioStatus = "Board cleared.";
+    hintStatus = "No hint requested.";
     clearSolutionState();
 }
 
@@ -359,7 +576,10 @@ void App::resetBoard() {
     editBoard = resetSnapshot;
     initialBoard = resetSnapshot;
     replayBoard = resetSnapshot;
+    markAllGivens();
+    hasSolutionCache = false;
     lastSolveMs = 0;
+    ioStatus = "Puzzle reset.";
     clearSolutionState();
 }
 
@@ -372,11 +592,14 @@ void App::loadNextPuzzle() {
     initialBoard = editBoard;
     replayBoard = editBoard;
     resetSnapshot = editBoard;
+    markAllGivens();
+    hasSolutionCache = false;
     puzzleName = puzzle.name + " (" + puzzle.difficulty + ")";
     nextPuzzleIndex = (nextPuzzleIndex + 1) % static_cast<int>(puzzles.size());
     selectedRow = -1;
     selectedCol = -1;
     lastSolveMs = 0;
+    ioStatus = "Loaded built-in puzzle.";
     clearSolutionState();
 }
 
@@ -401,6 +624,368 @@ void App::cycleCandidateDisplayMode() {
     }
 }
 
+void App::cycleGeneratorDifficulty() {
+    generatorDifficulty = PuzzleGenerator::nextDifficulty(generatorDifficulty);
+    generatorStatus = "Generator difficulty: " + PuzzleGenerator::difficultyName(generatorDifficulty) + ".";
+}
+
+void App::generatePuzzle() {
+    generating = true;
+    generatorStatus = "Generating puzzle...";
+    render();
+
+    lastGenerated = puzzleGenerator.generate(generatorDifficulty);
+    editBoard = lastGenerated.puzzle;
+    initialBoard = editBoard;
+    replayBoard = editBoard;
+    resetSnapshot = editBoard;
+    finalBoard = lastGenerated.solution;
+    solutionCache = lastGenerated.solution;
+    hasSolutionCache = lastGenerated.solution.isSolved();
+    difficultyReport = lastGenerated.report;
+    lastSolveMs = lastGenerated.generateTimeMs;
+    lastSeed = lastGenerated.seed;
+    puzzleName = "Generated " + PuzzleGenerator::difficultyName(generatorDifficulty);
+    selectedRow = -1;
+    selectedCol = -1;
+    markAllGivens();
+    clearSolutionState();
+    finalBoard = lastGenerated.solution;
+    solutionCache = lastGenerated.solution;
+    hasSolutionCache = lastGenerated.solution.isSolved();
+    difficultyReport = lastGenerated.report;
+    generating = false;
+    generatorStatus = "Generated " + PuzzleGenerator::difficultyName(generatorDifficulty)
+        + ", givens " + std::to_string(lastGenerated.givens)
+        + ", seed " + lastGenerated.seed
+        + ", unique yes.";
+    ioStatus = "Generated puzzle ready.";
+}
+
+void App::requestHint(HintLevel level) {
+    currentHint = hintCoach.getHint(editBoard, level);
+    hintStatus = currentHint.message;
+    if (!currentHint.explanation.empty()) {
+        hintStatus += " " + currentHint.explanation;
+    }
+}
+
+void App::applyCurrentHint() {
+    std::string status;
+    if (!hintCoach.applyHint(editBoard, currentHint, &status)) {
+        hintStatus = status;
+        return;
+    }
+    if (Board::isInside(currentHint.row, currentHint.col)) {
+        cellSources[currentHint.row][currentHint.col] = CellSource::Hint;
+    }
+    replayBoard = editBoard;
+    initialBoard = editBoard;
+    hintStatus = status;
+    steps.clear();
+    currentStep = -1;
+    paused = false;
+    playing = false;
+    mode = Mode::Editing;
+}
+
+void App::cycleMistakeMode() {
+    if (mistakeMode == MistakeMode::Off) {
+        mistakeMode = MistakeMode::RuleCheck;
+    } else if (mistakeMode == MistakeMode::RuleCheck) {
+        mistakeMode = MistakeMode::SolutionCheck;
+    } else {
+        mistakeMode = MistakeMode::Off;
+    }
+    updateMistakeDetection();
+}
+
+void App::importPuzzleFromClipboard() {
+    Board imported;
+    std::string status;
+    if (!PuzzleIO::importFromClipboard(imported, &status)) {
+        ioStatus = status;
+        return;
+    }
+    editBoard = imported;
+    initialBoard = editBoard;
+    replayBoard = editBoard;
+    resetSnapshot = editBoard;
+    puzzleName = "Imported Puzzle";
+    selectedRow = -1;
+    selectedCol = -1;
+    markAllGivens();
+    clearSolutionState();
+    ioStatus = status;
+}
+
+void App::importPuzzleFromTextBox() {
+    Board imported;
+    std::string status;
+    if (!PuzzleIO::parsePuzzleString(importTextBuffer, imported, &status)) {
+        ioStatus = status;
+        return;
+    }
+
+    editBoard = imported;
+    initialBoard = editBoard;
+    replayBoard = editBoard;
+    resetSnapshot = editBoard;
+    puzzleName = "Imported Puzzle";
+    selectedRow = -1;
+    selectedCol = -1;
+    markAllGivens();
+    clearSolutionState();
+    ioStatus = "Imported puzzle string from text box.";
+}
+
+void App::pasteClipboardToImportBox() {
+    if (!SDL_HasClipboardText()) {
+        ioStatus = "Clipboard does not contain puzzle text.";
+        return;
+    }
+
+    char* raw = SDL_GetClipboardText();
+    if (!raw) {
+        ioStatus = "Failed to read clipboard text.";
+        return;
+    }
+    const std::string pasted(raw);
+    SDL_free(raw);
+
+    importTextBuffer = sanitizePuzzleEntryText(pasted);
+    std::ostringstream status;
+    status << "Pasted " << importTextBuffer.size() << " / 81 characters into import box.";
+    ioStatus = status.str();
+}
+
+void App::appendImportText(const std::string& text) {
+    const std::string sanitized = sanitizePuzzleEntryText(text);
+    if (sanitized.empty()) {
+        return;
+    }
+
+    const size_t remaining = importTextBuffer.size() >= 81 ? 0 : 81 - importTextBuffer.size();
+    importTextBuffer.append(sanitized.substr(0, remaining));
+    std::ostringstream status;
+    status << "Import text " << importTextBuffer.size() << " / 81 characters.";
+    ioStatus = status.str();
+}
+
+void App::copyCurrentPuzzleString() {
+    PuzzleIO::copyPuzzleToClipboard(editBoard, &ioStatus);
+}
+
+void App::copyCurrentSolutionString() {
+    if (finalBoard.isSolved()) {
+        PuzzleIO::copySolutionToClipboard(finalBoard, &ioStatus);
+        return;
+    }
+    ensureSolutionCache();
+    PuzzleIO::copySolutionToClipboard(solutionCache, &ioStatus);
+}
+
+void App::saveCurrentPuzzleToLibrary() {
+    ensureSolutionCache();
+    const std::string difficulty = DifficultyAnalyzer::gradeName(difficultyReport.grade);
+    const LibraryEntry entry = PuzzleLibrary::makeEntry(
+        puzzleName.empty() ? "Untitled Puzzle" : puzzleName,
+        difficulty,
+        editBoard,
+        hasSolutionCache ? &solutionCache : nullptr,
+        lastSeed.empty() ? "-" : lastSeed);
+    puzzleLibrary.saveEntry(entry, &libraryStatus);
+    librarySelection = std::max(0, puzzleLibrary.count() - 1);
+}
+
+void App::toggleLibraryPanel() {
+    if (currentOverlay == OverlayPage::Library) {
+        closeOverlay();
+        return;
+    }
+    currentOverlay = OverlayPage::Library;
+    libraryVisible = true;
+    puzzleLibrary.load(&libraryStatus);
+    if (puzzleLibrary.count() == 0) {
+        librarySelection = 0;
+    } else {
+        librarySelection = std::clamp(librarySelection, 0, puzzleLibrary.count() - 1);
+    }
+}
+
+void App::moveLibrarySelection(int delta) {
+    if (!libraryVisible || puzzleLibrary.count() == 0) {
+        return;
+    }
+    librarySelection = std::clamp(librarySelection + delta, 0, puzzleLibrary.count() - 1);
+    const LibraryEntry* entry = puzzleLibrary.entryAt(librarySelection);
+    if (entry) {
+        libraryStatus = "Selected " + entry->name + ".";
+    }
+}
+
+void App::loadSelectedLibraryPuzzle() {
+    const LibraryEntry* entry = puzzleLibrary.entryAt(librarySelection);
+    if (!entry) {
+        libraryStatus = "No library puzzle selected.";
+        return;
+    }
+    Board loaded;
+    std::string error;
+    if (!PuzzleIO::parsePuzzleString(entry->puzzleString, loaded, &error)) {
+        libraryStatus = "Failed to load library puzzle: " + error;
+        return;
+    }
+    editBoard = loaded;
+    initialBoard = editBoard;
+    replayBoard = editBoard;
+    resetSnapshot = editBoard;
+    puzzleName = entry->name + " (" + entry->difficulty + ")";
+    lastSeed = entry->seed;
+    markAllGivens();
+    clearSolutionState();
+    libraryStatus = "Loaded " + entry->name + ".";
+}
+
+void App::analyzeCurrentBoard() {
+    Solver analyzerSolver;
+    const SolveResult result = analyzerSolver.solveUniqueOrMultiple(editBoard, SolverMode::Smart);
+    difficultyReport = difficultyAnalyzer.analyze(editBoard, result, analyzerSolver.getSteps());
+}
+
+void App::openOverlay(OverlayPage page) {
+    if (importTextEditing && page != OverlayPage::ImportExport) {
+        SDL_StopTextInput();
+        importTextEditing = false;
+    }
+    currentOverlay = page;
+    if (page == OverlayPage::ImportExport) {
+        importTextEditing = true;
+        SDL_StartTextInput();
+        if (ioStatus == "Ready.") {
+            ioStatus = "Import box ready. Type or paste 81 characters.";
+        }
+    }
+    if (page == OverlayPage::Library) {
+        libraryVisible = true;
+        puzzleLibrary.load(&libraryStatus);
+        if (puzzleLibrary.count() > 0) {
+            librarySelection = std::clamp(librarySelection, 0, puzzleLibrary.count() - 1);
+        }
+    }
+    if (page == OverlayPage::Analytics) {
+        analyzeCurrentBoard();
+    }
+}
+
+void App::closeOverlay() {
+    if (importTextEditing) {
+        SDL_StopTextInput();
+        importTextEditing = false;
+    }
+    currentOverlay = OverlayPage::None;
+}
+
+void App::cycleCommand(int delta) {
+    const int total = CommandDeck::count();
+    commandIndex = (commandIndex + delta) % total;
+    if (commandIndex < 0) {
+        commandIndex += total;
+    }
+}
+
+CommandItem App::currentCommandItem() const {
+    const CommandAction action = CommandDeck::actionAt(commandIndex);
+    return CommandDeck::describe(action, commandEnabled(action));
+}
+
+bool App::commandEnabled(CommandAction action) const {
+    switch (action) {
+    case CommandAction::ApplyHint:
+        return currentHint.available;
+    case CommandAction::CopySolution:
+        return finalBoard.isSolved() || hasSolutionCache;
+    case CommandAction::OpenAnalytics:
+        return !editBoard.isSolved() || hasResult || difficultyReport.stats.totalSteps > 0;
+    default:
+        return true;
+    }
+}
+
+void App::executeCurrentCommand() {
+    const CommandItem command = currentCommandItem();
+    if (!command.enabled) {
+        ioStatus = "Current action is not available yet.";
+        return;
+    }
+    executeCommand(command.action);
+}
+
+void App::executeCommand(CommandAction action) {
+    switch (action) {
+    case CommandAction::Solve:
+        startSolve();
+        break;
+    case CommandAction::GentleHint:
+        requestHint(HintLevel::Gentle);
+        break;
+    case CommandAction::TechniqueHint:
+        requestHint(HintLevel::Technique);
+        break;
+    case CommandAction::DirectHint:
+        requestHint(HintLevel::Direct);
+        break;
+    case CommandAction::ApplyHint:
+        applyCurrentHint();
+        break;
+    case CommandAction::GeneratePuzzle:
+        generatePuzzle();
+        break;
+    case CommandAction::ChangeGeneratorDifficulty:
+        cycleGeneratorDifficulty();
+        break;
+    case CommandAction::ToggleSolverMode:
+        cycleSolverMode();
+        break;
+    case CommandAction::ToggleCandidateDisplay:
+        cycleCandidateDisplayMode();
+        break;
+    case CommandAction::ToggleMistakeMode:
+        cycleMistakeMode();
+        break;
+    case CommandAction::ImportClipboard:
+        openOverlay(OverlayPage::ImportExport);
+        break;
+    case CommandAction::CopyPuzzle:
+        copyCurrentPuzzleString();
+        break;
+    case CommandAction::CopySolution:
+        copyCurrentSolutionString();
+        break;
+    case CommandAction::SaveLibrary:
+        saveCurrentPuzzleToLibrary();
+        break;
+    case CommandAction::OpenLibrary:
+        openOverlay(OverlayPage::Library);
+        break;
+    case CommandAction::OpenAnalytics:
+        openOverlay(OverlayPage::Analytics);
+        break;
+    case CommandAction::OpenSettings:
+        openOverlay(OverlayPage::Settings);
+        break;
+    case CommandAction::ClearBoard:
+        clearBoard();
+        break;
+    case CommandAction::ResetBoard:
+        resetBoard();
+        break;
+    case CommandAction::TurboSolve:
+        startTurboSolve();
+        break;
+    }
+}
+
 void App::adjustSpeed(double factor) {
     speedMultiplier = std::clamp(speedMultiplier * factor, 0.25, 4.0);
 }
@@ -420,6 +1005,8 @@ void App::clearSolutionState() {
     paused = false;
     playing = false;
     hasResult = false;
+    hasSolutionCache = false;
+    currentHint = Hint{};
     mode = Mode::Editing;
     stepStartedTicks = SDL_GetTicks();
 }
@@ -545,21 +1132,28 @@ Uint32 App::delayForCurrentStep() const {
 }
 
 std::vector<UIButton> App::makeButtons() const {
-    const bool hasSteps = !steps.empty();
+    if (currentOverlay != OverlayPage::None) {
+        std::vector<UIButton> overlayButtons = {
+            UIButton{"overlay_close", "Close", SDL_Rect{0, 0, 0, 0}, true}
+        };
+        if (currentOverlay == OverlayPage::ImportExport) {
+            overlayButtons.push_back(UIButton{"overlay_paste_clipboard", "Paste", SDL_Rect{0, 0, 0, 0}, true});
+            overlayButtons.push_back(UIButton{"overlay_import_text", "Import", SDL_Rect{0, 0, 0, 0}, true});
+            overlayButtons.push_back(UIButton{"overlay_copy_puzzle", "Copy Puzzle", SDL_Rect{0, 0, 0, 0}, true});
+            overlayButtons.push_back(UIButton{"overlay_copy_solution", "Copy Sol.", SDL_Rect{0, 0, 0, 0}, finalBoard.isSolved() || hasSolutionCache});
+        }
+        renderer.layoutButtons(overlayButtons, mouseX, mouseY, pressedButtonId);
+        return overlayButtons;
+    }
+
     std::vector<UIButton> buttons = {
-        UIButton{"solve", "Solve", SDL_Rect{0, 0, 0, 0}, true},
-        UIButton{"mode", "Mode", SDL_Rect{0, 0, 0, 0}, true},
-        UIButton{"turbo", "Turbo", SDL_Rect{0, 0, 0, 0}, true},
-        UIButton{"auto", paused ? "Auto" : "Pause", SDL_Rect{0, 0, 0, 0}, hasSteps},
-        UIButton{"prev", "Prev", SDL_Rect{0, 0, 0, 0}, hasSteps && currentStep > -1},
-        UIButton{"next", "Next", SDL_Rect{0, 0, 0, 0},
-                 hasSteps && currentStep + 1 < static_cast<int>(steps.size())},
-        UIButton{"reset", "Reset", SDL_Rect{0, 0, 0, 0}, true},
-        UIButton{"clear", "Clear", SDL_Rect{0, 0, 0, 0}, true},
-        UIButton{"puzzle", "Puzzle", SDL_Rect{0, 0, 0, 0}, true},
-        UIButton{"candidates", "Cand " + candidateModeText(), SDL_Rect{0, 0, 0, 0}, true},
-        UIButton{"full", renderer.isFullscreen() ? "Window" : "Full",
-                 SDL_Rect{0, 0, 0, 0}, true}
+        UIButton{"icon_settings", "[SET]", SDL_Rect{0, 0, 0, 0}, true},
+        UIButton{"icon_analytics", "[ANL]", SDL_Rect{0, 0, 0, 0}, true},
+        UIButton{"icon_library", "[LIB]", SDL_Rect{0, 0, 0, 0}, true},
+        UIButton{"icon_help", "[?]", SDL_Rect{0, 0, 0, 0}, true},
+        UIButton{"deck_prev", "<", SDL_Rect{0, 0, 0, 0}, true},
+        UIButton{"deck_next", ">", SDL_Rect{0, 0, 0, 0}, true},
+        UIButton{"deck_exec", "Execute", SDL_Rect{0, 0, 0, 0}, currentCommandItem().enabled}
     };
     renderer.layoutButtons(buttons, mouseX, mouseY, pressedButtonId);
     return buttons;
@@ -636,6 +1230,272 @@ std::string App::candidateModeText() const {
     return "Focus";
 }
 
+std::string App::mistakeModeText() const {
+    switch (mistakeMode) {
+    case MistakeMode::Off:
+        return "Off";
+    case MistakeMode::RuleCheck:
+        return "Rule";
+    case MistakeMode::SolutionCheck:
+        return "Solution";
+    }
+    return "Off";
+}
+
+std::string App::generatorText() const {
+    std::ostringstream out;
+    out << PuzzleGenerator::difficultyName(generatorDifficulty);
+    if (generating) {
+        out << " | Generating...";
+    } else if (lastGenerated.givens > 0) {
+        out << " | Givens " << lastGenerated.givens
+            << " | Seed " << lastGenerated.seed
+            << " | " << lastGenerated.generateTimeMs << " ms";
+    } else {
+        out << " | " << generatorStatus;
+    }
+    return out.str();
+}
+
+std::string App::hintText() const {
+    if (currentHint.available) {
+        std::ostringstream out;
+        out << HintCoach::levelName(currentHint.level)
+            << " | " << HintCoach::techniqueName(currentHint.technique)
+            << " | " << currentHint.message;
+        return out.str();
+    }
+    return hintStatus;
+}
+
+std::string App::difficultyText() const {
+    std::ostringstream out;
+    out << DifficultyAnalyzer::gradeName(difficultyReport.grade)
+        << " | Score " << difficultyReport.score
+        << " | Hardest " << difficultyReport.hardestTechnique;
+    return out.str();
+}
+
+std::string App::ioText() const {
+    return puzzleStringPreview() + " | " + ioStatus;
+}
+
+std::string App::libraryText() const {
+    std::ostringstream out;
+    out << (libraryVisible ? "Open" : "Closed")
+        << " | " << puzzleLibrary.count() << " saved";
+    const LibraryEntry* entry = puzzleLibrary.entryAt(librarySelection);
+    if (entry) {
+        out << " | " << (librarySelection + 1) << ": " << entry->name;
+    }
+    out << " | " << libraryStatus;
+    return out.str();
+}
+
+std::string App::focusText() const {
+    if (currentHint.available) {
+        return "Hint: " + currentHint.message;
+    }
+    if (!steps.empty() && currentStep >= 0 && currentStep < static_cast<int>(steps.size())) {
+        const SolveStep& step = steps[static_cast<size_t>(currentStep)];
+        std::ostringstream out;
+        out << "Step " << (currentStep + 1) << "/" << steps.size() << ": ";
+        if (step.number > 0 && Board::isInside(step.row, step.col)) {
+            out << "r" << (step.row + 1) << "c" << (step.col + 1) << " = " << step.number << ". ";
+        }
+        out << (step.reason.empty() ? "Reasoning step recorded." : step.reason);
+        return out.str();
+    }
+    if (editBoard.emptyCount() == Board::Size * Board::Size) {
+        return "Ready to begin. Generate a puzzle or enter one manually.";
+    }
+    return "Ready. Solve, ask for a hint, or step through the reasoning trace.";
+}
+
+std::string App::shortStatusText() const {
+    if (currentOverlay != OverlayPage::None) {
+        return overlayTitle(currentOverlay) + " drawer open.";
+    }
+    if (generating) {
+        return "Generating puzzle...";
+    }
+    if (!ioStatus.empty() && ioStatus != "Ready.") {
+        return ioStatus;
+    }
+    if (!hintStatus.empty() && hintStatus != "No hint requested.") {
+        return hintStatus;
+    }
+    if (!generatorStatus.empty() && generatorStatus.find("Generated") != std::string::npos) {
+        return generatorStatus;
+    }
+    return statusText();
+}
+
+std::string App::overlayBodyText() const {
+    std::ostringstream out;
+    for (const std::string& line : overlayLines()) {
+        out << line << "\n";
+    }
+    return out.str();
+}
+
+std::vector<std::string> App::overlayLines() const {
+    std::vector<std::string> lines;
+    switch (currentOverlay) {
+    case OverlayPage::Settings:
+        lines = {
+            "Visual",
+            "Candidate display: " + candidateModeText(),
+            "Animation speed: " + std::to_string(static_cast<int>(speedMultiplier * 100.0)) + "%",
+            renderer.isFullscreen() ? "Fullscreen: On" : "Fullscreen: Off",
+            "Theme: Radar Dark",
+            "",
+            "Solver",
+            "Solver mode: " + solverModeText(),
+            "Mistake mode: " + mistakeModeText(),
+            "",
+            "Controls",
+            paused ? "Autoplay: Paused" : "Autoplay: Ready",
+            "Use Command Deck actions to change modes or execute commands.",
+            "",
+            "About",
+            std::string("Version ") + AppVersion,
+            "Project: Sudoku Reasoning Radar"
+        };
+        break;
+    case OverlayPage::Analytics:
+        lines = {
+            "Grade: " + DifficultyAnalyzer::gradeName(difficultyReport.grade),
+            "Score: " + std::to_string(difficultyReport.score),
+            "Total steps: " + std::to_string(difficultyReport.stats.totalSteps),
+            "Givens: " + std::to_string(difficultyReport.givens),
+            "Empty cells: " + std::to_string(difficultyReport.emptyCells),
+            "Hardest technique: " + difficultyReport.hardestTechnique,
+            "",
+            "Technique stats",
+            "Naked Singles: " + std::to_string(difficultyReport.stats.nakedSingles),
+            "Hidden Singles: " + std::to_string(difficultyReport.stats.hiddenSingles),
+            "Locked Candidates: " + std::to_string(difficultyReport.stats.lockedCandidates),
+            "Box-Line Reductions: " + std::to_string(difficultyReport.stats.boxLineReductions),
+            "Naked Pairs: " + std::to_string(difficultyReport.stats.nakedPairs),
+            "Hidden Pairs: " + std::to_string(difficultyReport.stats.hiddenPairs),
+            "X-Wings: " + std::to_string(difficultyReport.stats.xWings),
+            "Guesses: " + std::to_string(difficultyReport.stats.guesses),
+            "Backtracks: " + std::to_string(difficultyReport.stats.backtracks),
+            "Contradictions: " + std::to_string(difficultyReport.stats.contradictions),
+            "",
+            "Branch analysis",
+            "Max branch depth: " + std::to_string(difficultyReport.maxBranchDepth),
+            "",
+            "Summary",
+            difficultyReport.summary
+        };
+        break;
+    case OverlayPage::Library: {
+        lines.push_back("Saved puzzles: " + std::to_string(puzzleLibrary.count()));
+        if (puzzleLibrary.count() == 0) {
+            lines.push_back("No saved puzzles yet. Press Ctrl+S or Save Current to add one.");
+        } else {
+            lines.push_back("Use Up/Down to select and Enter to load.");
+            const int start = std::max(0, librarySelection - 4);
+            const int end = std::min(puzzleLibrary.count(), start + 9);
+            for (int i = start; i < end; ++i) {
+                const LibraryEntry* entry = puzzleLibrary.entryAt(i);
+                if (!entry) {
+                    continue;
+                }
+                std::ostringstream row;
+                row << (i == librarySelection ? "> " : "  ")
+                    << (i + 1) << ". " << entry->name
+                    << " | " << entry->difficulty
+                    << " | " << entry->createdAt;
+                lines.push_back(row.str());
+            }
+        }
+        lines.push_back("");
+        lines.push_back(libraryStatus);
+        break;
+    }
+    case OverlayPage::ImportExport:
+        lines = {
+            "Input format",
+            "Type or paste 81 characters. Digits 1-9 are givens; 0 or . are empty cells.",
+            "Enter imports the text box. Delete clears it. Ctrl+V pastes into it.",
+            "",
+            "Current puzzle",
+            PuzzleIO::boardToString(editBoard),
+            "",
+            ioStatus
+        };
+        break;
+    case OverlayPage::Shortcuts:
+        lines = {
+            "Core",
+            "Space: Solve / Play",
+            "Enter: Execute selected command",
+            "Left / Right: Step playback or command action",
+            "Tab / Shift+Tab: Cycle command action",
+            "Esc: Close overlay / quit",
+            "",
+            "Puzzle",
+            "G: Generate puzzle",
+            "Shift+G: Generator page",
+            "N: Built-in puzzle",
+            "C: Clear",
+            "R: Reset",
+            "",
+            "Hints",
+            "F1: Gentle hint",
+            "F2: Technique hint",
+            "F3: Direct hint",
+            "",
+            "Modes",
+            "M: Solver mode",
+            "H: Candidate display",
+            "K: Mistake mode",
+            "F11: Fullscreen",
+            "",
+            "Library / I/O",
+            "Ctrl+I: Import",
+            "Ctrl+E: Copy puzzle",
+            "Ctrl+Shift+E: Copy solution",
+            "Ctrl+S: Save to library",
+            "L: Library page"
+        };
+        break;
+    case OverlayPage::Generator:
+        lines = {
+            "Difficulty: " + PuzzleGenerator::difficultyName(generatorDifficulty),
+            "Current seed: " + (lastSeed.empty() ? "Random on next generation" : lastSeed),
+            "Givens target: generated by selected difficulty",
+            "",
+            "Actions",
+            "G: Generate current difficulty",
+            "Command Deck: Change Difficulty",
+            "Command Deck: Generate Puzzle",
+            "",
+            "Last generated",
+            lastGenerated.givens > 0
+                ? (std::string("Givens ") + std::to_string(lastGenerated.givens)
+                    + ", time " + std::to_string(lastGenerated.generateTimeMs) + " ms"
+                    + ", unique " + std::string(lastGenerated.unique ? "yes" : "no"))
+                : "Not generated yet."
+        };
+        break;
+    case OverlayPage::About:
+        lines = {
+            "Sudoku Reasoning Radar",
+            std::string("Version ") + AppVersion,
+            "A visual Sudoku engine that turns hidden logic into motion.",
+            "GitHub: #github-link-placeholder"
+        };
+        break;
+    case OverlayPage::None:
+        break;
+    }
+    return lines;
+}
+
 std::string App::selectedCellText() const {
     if (!Board::isInside(selectedRow, selectedCol)) {
         return "None";
@@ -686,11 +1546,153 @@ void App::editSelectedCell(int number) {
     if (!Board::isInside(selectedRow, selectedCol)) {
         return;
     }
-    editBoard.setCellValue(selectedRow, selectedCol, number, number != 0);
+    if (cellSources[selectedRow][selectedCol] == CellSource::Given && editBoard.isFixed(selectedRow, selectedCol)) {
+        ioStatus = "Given cells are locked. Use Clear or import another puzzle to change givens.";
+        return;
+    }
+    editBoard.setCellValue(selectedRow, selectedCol, number, false);
+    cellSources[selectedRow][selectedCol] = number == 0 ? CellSource::Empty : CellSource::Player;
     initialBoard = editBoard;
     replayBoard = editBoard;
-    resetSnapshot = editBoard;
     lastSolveMs = 0;
     clearSolutionState();
     puzzleName = "Custom";
+    updateMistakeDetection();
+}
+
+void App::markAllGivens() {
+    clearCellSources();
+    for (int r = 0; r < Board::Size; ++r) {
+        for (int c = 0; c < Board::Size; ++c) {
+            if (editBoard.getCell(r, c) != 0) {
+                cellSources[r][c] = CellSource::Given;
+            }
+        }
+    }
+}
+
+void App::clearCellSources() {
+    for (int r = 0; r < Board::Size; ++r) {
+        for (int c = 0; c < Board::Size; ++c) {
+            cellSources[r][c] = CellSource::Empty;
+        }
+    }
+}
+
+void App::updateMistakeDetection() {
+    mistakeCells.clear();
+    if (mistakeMode == MistakeMode::Off) {
+        mistakeStatus = "Mistake detection off.";
+        return;
+    }
+
+    auto addMistake = [&](int row, int col) {
+        if (!Board::isInside(row, col)) {
+            return;
+        }
+        for (const CellRef& ref : mistakeCells) {
+            if (ref.row == row && ref.col == col) {
+                return;
+            }
+        }
+        mistakeCells.push_back(CellRef{row, col});
+    };
+
+    if (mistakeMode == MistakeMode::RuleCheck) {
+        for (int r = 0; r < Board::Size; ++r) {
+            for (int c = 0; c < Board::Size; ++c) {
+                const int value = editBoard.getCell(r, c);
+                if (value == 0) {
+                    continue;
+                }
+                for (int cc = 0; cc < Board::Size; ++cc) {
+                    if (cc != c && editBoard.getCell(r, cc) == value) {
+                        addMistake(r, c);
+                        addMistake(r, cc);
+                    }
+                }
+                for (int rr = 0; rr < Board::Size; ++rr) {
+                    if (rr != r && editBoard.getCell(rr, c) == value) {
+                        addMistake(r, c);
+                        addMistake(rr, c);
+                    }
+                }
+                const int box = Board::boxId(r, c);
+                const int br = (box / Board::BoxSize) * Board::BoxSize;
+                const int bc = (box % Board::BoxSize) * Board::BoxSize;
+                for (int dr = 0; dr < Board::BoxSize; ++dr) {
+                    for (int dc = 0; dc < Board::BoxSize; ++dc) {
+                        const int rr = br + dr;
+                        const int cc = bc + dc;
+                        if ((rr != r || cc != c) && editBoard.getCell(rr, cc) == value) {
+                            addMistake(r, c);
+                            addMistake(rr, cc);
+                        }
+                    }
+                }
+            }
+        }
+        mistakeStatus = mistakeCells.empty()
+            ? "RuleCheck: no row/column/box conflicts."
+            : "RuleCheck: duplicate values highlighted.";
+        return;
+    }
+
+    ensureSolutionCache();
+    if (!hasSolutionCache) {
+        mistakeStatus = "SolutionCheck needs a unique solution cache.";
+        return;
+    }
+    for (int r = 0; r < Board::Size; ++r) {
+        for (int c = 0; c < Board::Size; ++c) {
+            const int value = editBoard.getCell(r, c);
+            if (value == 0 || cellSources[r][c] == CellSource::Given) {
+                continue;
+            }
+            if (value != solutionCache.getCell(r, c)) {
+                addMistake(r, c);
+            }
+        }
+    }
+    mistakeStatus = mistakeCells.empty()
+        ? "SolutionCheck: player entries match the unique solution."
+        : "SolutionCheck: highlighted entries differ from the unique solution.";
+}
+
+void App::ensureSolutionCache() {
+    if (hasSolutionCache && solutionCache.isSolved()) {
+        return;
+    }
+
+    Board base;
+    base.clear();
+    for (int r = 0; r < Board::Size; ++r) {
+        for (int c = 0; c < Board::Size; ++c) {
+            if (cellSources[r][c] == CellSource::Given && editBoard.getCell(r, c) != 0) {
+                base.setCellValue(r, c, editBoard.getCell(r, c), true);
+            }
+        }
+    }
+    if (base.emptyCount() == Board::Size * Board::Size) {
+        base = editBoard;
+    }
+
+    Solver cacheSolver;
+    const SolveResult result = cacheSolver.solveUniqueOrMultiple(base, SolverMode::Turbo);
+    difficultyReport = difficultyAnalyzer.analyze(base, result, cacheSolver.getSteps());
+    if (result == SolveResult::SolvedUnique && cacheSolver.getFinalBoard().isSolved()) {
+        solutionCache = cacheSolver.getFinalBoard();
+        hasSolutionCache = true;
+    } else {
+        solutionCache.clear();
+        hasSolutionCache = false;
+    }
+}
+
+std::string App::puzzleStringPreview() const {
+    const std::string text = PuzzleIO::boardToString(editBoard);
+    if (text.size() <= 20) {
+        return text;
+    }
+    return text.substr(0, 20) + "...";
 }
