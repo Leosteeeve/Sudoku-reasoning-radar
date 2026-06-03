@@ -10,6 +10,8 @@ std::string overlayTitle(OverlayPage page) {
         return "Puzzle Library";
     case OverlayPage::ImportExport:
         return "Import / Export";
+    case OverlayPage::OCRImport:
+        return "OCR Import Assistant";
     case OverlayPage::Shortcuts:
         return "Shortcuts";
     case OverlayPage::Generator:

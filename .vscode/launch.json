@@ -16,15 +16,15 @@
                 },
                 {
                     "name": "TEMP",
-                    "value": "D:\\Soduku"
+                    "value": "D:\\Soduku\\build_tmp"
                 },
                 {
                     "name": "TMP",
-                    "value": "D:\\Soduku"
+                    "value": "D:\\Soduku\\build_tmp"
                 },
                 {
                     "name": "TMPDIR",
-                    "value": "D:\\Soduku"
+                    "value": "D:\\Soduku\\build_tmp"
                 }
             ],
             "externalConsole": true,

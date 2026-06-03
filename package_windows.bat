@@ -1,23 +1,57 @@
 @echo off
-setlocal
+setlocal EnableExtensions EnableDelayedExpansion
 
 cd /d "%~dp0"
 
+set "VERSION=v0.2.1"
 set "APP_EXE=SudokuSolver.exe"
-set "APP_VERSION=v0.2.0"
 set "APP_NAME=SudokuReasoningRadar_Windows"
+set "PROJECT_ROOT=%CD%"
+set "MSYS2_UCRT_BIN=D:\MSYS2\ucrt64\bin"
+set "PYTHON=%MSYS2_UCRT_BIN%\python.exe"
+set "NTLDD=%MSYS2_UCRT_BIN%\ntldd.exe"
+set "TESSDATA_SRC=D:\MSYS2\ucrt64\share\tessdata\eng.traineddata"
 set "RELEASE_ROOT=release"
-set "RELEASE_DIR=%RELEASE_ROOT%\SudokuReasoningRadar_%APP_VERSION%_Windows"
+set "RELEASE_DIR=%RELEASE_ROOT%\SudokuReasoningRadar_%VERSION%_Windows"
 set "ZIP_PATH=%RELEASE_ROOT%\%APP_NAME%.zip"
-set "MSYS2_BIN=D:\MSYS2\ucrt64\bin"
 set "WEBSITE_ZIP=website\downloads\%APP_NAME%.zip"
 set "DOCS_ZIP=docs\downloads\%APP_NAME%.zip"
+set "COPIED_DLL_COUNT=unknown"
+set "MISSING_DLL_COUNT=unknown"
+set "COLLECT_WARNING=0"
 
-echo Packaging Sudoku Reasoning Radar for Windows...
+echo Packaging Sudoku Reasoning Radar %VERSION% for Windows...
+
+if not exist "%PYTHON%" (
+    echo ERROR: Missing MSYS2 UCRT64 Python:
+    echo   %PYTHON%
+    echo Install or repair MSYS2 UCRT64 before packaging.
+    exit /b 1
+)
+
+if not exist "%NTLDD%" (
+    echo Missing ntldd.
+    echo Install it in MSYS2 UCRT64:
+    echo   pacman -S --needed mingw-w64-ucrt-x86_64-ntldd
+    exit /b 1
+)
 
 if not exist "%APP_EXE%" (
-    echo ERROR: %APP_EXE% was not found.
-    echo Build the C++ project first with VS Code Ctrl+F5 or the README build command.
+    echo %APP_EXE% was not found. Running build.bat first...
+    if exist "build.bat" (
+        call build.bat
+        if errorlevel 1 (
+            echo ERROR: Build failed. Packaging stopped.
+            exit /b 1
+        )
+    ) else (
+        echo ERROR: build.bat was not found.
+        exit /b 1
+    )
+)
+
+if not exist "%APP_EXE%" (
+    echo ERROR: %APP_EXE% still does not exist after build.
     exit /b 1
 )
 
@@ -31,25 +65,6 @@ if errorlevel 1 (
     echo ERROR: Failed to copy %APP_EXE%.
     exit /b 1
 )
-
-echo Copying SDL2 runtime DLLs and UCRT64 dependencies...
-call :copydll SDL2.dll
-call :copydll SDL2_ttf.dll
-call :copydll libfreetype-6.dll
-call :copydll libharfbuzz-0.dll
-call :copydll libpng16-16.dll
-call :copydll zlib1.dll
-call :copydll libbrotlidec.dll
-call :copydll libbrotlicommon.dll
-call :copydll libbz2-1.dll
-call :copydll libgraphite2.dll
-call :copydll libglib-2.0-0.dll
-call :copydll libintl-8.dll
-call :copydll libiconv-2.dll
-call :copydll libpcre2-8-0.dll
-call :copydll libgcc_s_seh-1.dll
-call :copydll libstdc++-6.dll
-call :copydll libwinpthread-1.dll
 
 if exist "assets" (
     echo Copying assets folder...
@@ -74,33 +89,67 @@ if exist "LICENSE.txt" (
     echo No LICENSE file found. Add one before public release if needed.
 )
 
+if exist "%TESSDATA_SRC%" (
+    echo Copying Tesseract English tessdata...
+    if not exist "%RELEASE_DIR%\tessdata" mkdir "%RELEASE_DIR%\tessdata"
+    copy /Y "%TESSDATA_SRC%" "%RELEASE_DIR%\tessdata\eng.traineddata" >nul
+) else (
+    echo WARNING: %TESSDATA_SRC% was not found. OCR Import needs English tessdata.
+)
+
 echo Creating release README...
 (
     echo Sudoku Reasoning Radar - Windows Release
-    echo Version %APP_VERSION%
+    echo Version %VERSION%
     echo.
     echo Run:
     echo   SudokuSolver.exe
     echo.
-    echo Included files should include:
-    echo   SudokuSolver.exe
-    echo   SDL2.dll
-    echo   SDL2_ttf.dll
-    echo   libfreetype-6.dll and other SDL2_ttf runtime dependencies
+    echo Keep all DLL files and the tessdata folder next to SudokuSolver.exe.
+    echo OCR Import requires:
+    echo   tessdata\eng.traineddata
     echo.
-    echo If the app does not start, make sure every DLL in this folder remains next to the executable.
+    echo OCR works best with clear screenshots or straight photos of printed Sudoku grids.
+    echo Handwritten Sudoku support is experimental.
     echo.
-    echo Project website files can be found in website/ and docs/.
+    echo If the app does not start, check:
+    echo   dependency_report.txt
+    echo   dependency_missing.txt
 ) > "%RELEASE_DIR%\README_RELEASE.txt"
+
+echo Collecting MSYS2 UCRT64 DLL dependencies with ntldd...
+"%PYTHON%" "tools\collect_msys2_dlls.py" ^
+    --target "%RELEASE_DIR%\%APP_EXE%" ^
+    --output "%RELEASE_DIR%" ^
+    --msys-bin "%MSYS2_UCRT_BIN%" ^
+    --ntldd "%NTLDD%"
+set "COLLECT_EXIT=%ERRORLEVEL%"
+if "%COLLECT_EXIT%"=="2" (
+    echo ERROR: Dependency collection could not run.
+    exit /b 1
+)
+if not "%COLLECT_EXIT%"=="0" (
+    set "COLLECT_WARNING=1"
+    echo WARNING: Dependency collection reported missing DLLs. See %RELEASE_DIR%\dependency_missing.txt.
+)
+
+if exist "%RELEASE_DIR%\dependency_report.txt" (
+    for /f "tokens=2 delims=:" %%A in ('findstr /B /C:"copied DLL count:" "%RELEASE_DIR%\dependency_report.txt"') do set "COPIED_DLL_COUNT=%%A"
+    for /f "tokens=2 delims=:" %%A in ('findstr /B /C:"missing DLL count:" "%RELEASE_DIR%\dependency_report.txt"') do set "MISSING_DLL_COUNT=%%A"
+    set "COPIED_DLL_COUNT=!COPIED_DLL_COUNT: =!"
+    set "MISSING_DLL_COUNT=!MISSING_DLL_COUNT: =!"
+)
 
 echo Creating ZIP package...
 if exist "%ZIP_PATH%" del /q "%ZIP_PATH%"
-powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%RELEASE_DIR%\*' -DestinationPath '%ZIP_PATH%' -Force"
+powershell -NoProfile -ExecutionPolicy Bypass -Command "Compress-Archive -Path '%RELEASE_DIR%\*' -DestinationPath '%ZIP_PATH%' -Force -CompressionLevel Fastest"
+if errorlevel 1 (
+    echo ERROR: Automatic ZIP creation failed.
+    exit /b 1
+)
 
 if not exist "%ZIP_PATH%" (
-    echo WARNING: Automatic ZIP creation failed.
-    echo Please manually zip this folder:
-    echo   %RELEASE_DIR%
+    echo ERROR: %ZIP_PATH% was not created.
     exit /b 1
 )
 
@@ -122,18 +171,14 @@ if errorlevel 1 (
 )
 
 echo.
-echo Done:
-echo   %ZIP_PATH%
-echo   %WEBSITE_ZIP%
-echo   %DOCS_ZIP%
+echo Package complete.
+echo Release folder: %PROJECT_ROOT%\%RELEASE_DIR%
+echo ZIP: %PROJECT_ROOT%\%ZIP_PATH%
+echo Copied DLL count: %COPIED_DLL_COUNT%
+echo Missing DLL count: %MISSING_DLL_COUNT%
 
-endlocal
-exit /b 0
-
-:copydll
-if exist "%MSYS2_BIN%\%~1" (
-    copy /Y "%MSYS2_BIN%\%~1" "%RELEASE_DIR%\%~1" >nul
-) else (
-    echo WARNING: %MSYS2_BIN%\%~1 was not found.
+if "%COLLECT_WARNING%"=="1" (
+    exit /b 1
 )
+
 exit /b 0

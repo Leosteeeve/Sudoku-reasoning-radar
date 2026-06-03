@@ -10,6 +10,8 @@
 #include <sstream>
 #include <vector>
 
+#include <opencv2/imgproc.hpp>
+
 namespace {
 SDL_Color color(Uint8 r, Uint8 g, Uint8 b, Uint8 a = 255) {
     return SDL_Color{r, g, b, a};
@@ -68,6 +70,36 @@ std::string groupedPuzzleText(const std::string& text) {
     }
     return grouped;
 }
+}
+
+SDL_Texture* createTextureFromMat(SDL_Renderer* renderer, const cv::Mat& mat) {
+    if (!renderer || mat.empty()) {
+        return nullptr;
+    }
+
+    cv::Mat rgba;
+    if (mat.channels() == 1) {
+        cv::cvtColor(mat, rgba, cv::COLOR_GRAY2RGBA);
+    } else if (mat.channels() == 3) {
+        cv::cvtColor(mat, rgba, cv::COLOR_BGR2RGBA);
+    } else if (mat.channels() == 4) {
+        cv::cvtColor(mat, rgba, cv::COLOR_BGRA2RGBA);
+    } else {
+        return nullptr;
+    }
+
+    SDL_Surface* surface = SDL_CreateRGBSurfaceWithFormatFrom(rgba.data,
+                                                              rgba.cols,
+                                                              rgba.rows,
+                                                              32,
+                                                              static_cast<int>(rgba.step),
+                                                              SDL_PIXELFORMAT_RGBA32);
+    if (!surface) {
+        return nullptr;
+    }
+    SDL_Texture* texture = SDL_CreateTextureFromSurface(renderer, surface);
+    SDL_FreeSurface(surface);
+    return texture;
 }
 
 Renderer::Renderer() = default;
@@ -131,6 +163,14 @@ bool Renderer::initialize() {
 }
 
 void Renderer::shutdown() {
+    if (ocrOriginalTexture) {
+        SDL_DestroyTexture(ocrOriginalTexture);
+        ocrOriginalTexture = nullptr;
+    }
+    if (ocrWarpedTexture) {
+        SDL_DestroyTexture(ocrWarpedTexture);
+        ocrWarpedTexture = nullptr;
+    }
     closeFonts();
     if (sdlRenderer) {
         SDL_DestroyRenderer(sdlRenderer);
@@ -178,6 +218,18 @@ bool Renderer::cellFromPoint(int x, int y, int& row, int& col) const {
     return Board::isInside(row, col);
 }
 
+bool Renderer::ocrCellFromPoint(int x, int y, int& row, int& col) const {
+    refreshLayout();
+    const SDL_Rect board = ocrReviewBoardRect();
+    if (!pointInRect(x, y, board) || board.w <= 0 || board.h <= 0) {
+        return false;
+    }
+    const int cell = std::max(1, board.w / Board::Size);
+    col = std::clamp((x - board.x) / cell, 0, Board::Size - 1);
+    row = std::clamp((y - board.y) / cell, 0, Board::Size - 1);
+    return Board::isInside(row, col);
+}
+
 void Renderer::layoutButtons(std::vector<UIButton>& buttons,
                              int mouseX,
                              int mouseY,
@@ -209,6 +261,23 @@ void Renderer::layoutButtons(std::vector<UIButton>& buttons,
     const int actionW = (drawer.w - drawerPad * 2 - actionGap) / 2;
     const int actionRow2Y = drawer.y + drawer.h - drawerPad - actionH;
     const int actionRow1Y = actionRow2Y - actionGap - actionH;
+    const SDL_Rect ocrModal = ocrModalRect();
+    const int ocrPad = std::clamp(ocrModal.w / 48, 14, 22);
+    const int ocrGap = 8;
+    int ocrButtonCount = 0;
+    for (const UIButton& button : buttons) {
+        if (button.id.rfind("overlay_ocr_", 0) == 0) {
+            ++ocrButtonCount;
+        }
+    }
+    const bool hasOCRButtons = ocrButtonCount > 0;
+    const int ocrColumns = std::min(std::max(1, ocrButtonCount), 5);
+    const int ocrButtonH = 34;
+    const int ocrButtonW = ocrButtonCount == 0
+        ? 0
+        : (ocrModal.w - ocrPad * 2 - ocrGap * (ocrColumns - 1)) / ocrColumns;
+    const int ocrActionsY = ocrModal.y + ocrModal.h - ocrPad - ocrButtonH * 2 - ocrGap;
+    int ocrButtonIndex = 0;
     for (size_t i = 0; i < buttons.size(); ++i) {
         if (buttons[i].id.rfind("icon_", 0) == 0) {
             buttons[i].rect = SDL_Rect{iconX, iconY, iconW, iconH};
@@ -220,7 +289,9 @@ void Renderer::layoutButtons(std::vector<UIButton>& buttons,
         } else if (buttons[i].id == "deck_exec") {
             buttons[i].rect = SDL_Rect{deck.x, execY, deck.w, execH};
         } else if (buttons[i].id == "overlay_close") {
-            buttons[i].rect = SDL_Rect{drawer.x + drawer.w - drawerPad - 86, drawer.y + 18, 86, 30};
+            buttons[i].rect = hasOCRButtons
+                ? SDL_Rect{ocrModal.x + ocrModal.w - ocrPad - 86, ocrModal.y + ocrPad, 86, 30}
+                : SDL_Rect{drawer.x + drawer.w - drawerPad - 86, drawer.y + 18, 86, 30};
         } else if (buttons[i].id == "overlay_paste_clipboard") {
             buttons[i].rect = SDL_Rect{drawer.x + drawerPad, actionRow1Y, actionW, actionH};
         } else if (buttons[i].id == "overlay_import_text") {
@@ -229,6 +300,14 @@ void Renderer::layoutButtons(std::vector<UIButton>& buttons,
             buttons[i].rect = SDL_Rect{drawer.x + drawerPad, actionRow2Y, actionW, actionH};
         } else if (buttons[i].id == "overlay_copy_solution") {
             buttons[i].rect = SDL_Rect{drawer.x + drawerPad + actionW + actionGap, actionRow2Y, actionW, actionH};
+        } else if (buttons[i].id.rfind("overlay_ocr_", 0) == 0) {
+            const int row = ocrButtonIndex / ocrColumns;
+            const int col = ocrButtonIndex % ocrColumns;
+            buttons[i].rect = SDL_Rect{ocrModal.x + ocrPad + col * (ocrButtonW + ocrGap),
+                                       ocrActionsY + row * (ocrButtonH + ocrGap),
+                                       ocrButtonW,
+                                       ocrButtonH};
+            ++ocrButtonIndex;
         }
         buttons[i].hovered = buttons[i].enabled && pointInRect(mouseX, mouseY, buttons[i].rect);
         buttons[i].pressed = buttons[i].enabled && buttons[i].id == pressedId;
@@ -567,6 +646,10 @@ void Renderer::drawOverlay(const RenderInfo& info, const std::vector<UIButton>& 
     if (info.overlayPage == OverlayPage::None) {
         return;
     }
+    if (info.overlayPage == OverlayPage::OCRImport) {
+        drawOCROverlay(info, buttons);
+        return;
+    }
 
     const Theme& theme = appTheme();
     const int drawerW = std::clamp(layout.width / 3, 420, 520);
@@ -664,6 +747,235 @@ void Renderer::drawOverlay(const RenderInfo& info, const std::vector<UIButton>& 
                  1);
         drawText("Actions", drawer.x + pad, actionY - 34, fontSmall, theme.textSecondary);
     }
+}
+
+void Renderer::drawOCROverlay(const RenderInfo& info, const std::vector<UIButton>& buttons) {
+    const Theme& theme = appTheme();
+    const SDL_Rect scrim{0, 0, layout.width, layout.height};
+    const SDL_Rect modal = ocrModalRect();
+    fillRect(scrim, color(0, 0, 0, 150));
+    fillRect(modal, color(7, 14, 15, 248));
+    strokeRect(modal, color(theme.accent.r, theme.accent.g, theme.accent.b, 180), 1);
+
+    const int pad = std::clamp(modal.w / 48, 14, 22);
+    int y = modal.y + pad;
+    drawWrappedText("OCR Import Assistant",
+                    SDL_Rect{modal.x + pad, y, modal.w - pad * 2 - 112, 34},
+                    fontMedium,
+                    theme.textPrimary,
+                    2,
+                    1);
+    y += 38;
+    drawWrappedText("Detect a Sudoku grid from an image, review the recognized digits, then import.",
+                    SDL_Rect{modal.x + pad, y, modal.w - pad * 2, 34},
+                    fontSmall,
+                    theme.textSecondary,
+                    2,
+                    1);
+    y += 34;
+    drawLine(modal.x + pad, y, modal.x + modal.w - pad, y, color(theme.accent.r, theme.accent.g, theme.accent.b, 88), 1);
+    y += 14;
+
+    const int bottomReserve = 100;
+    const int gap = 14;
+    const int cardH = modal.y + modal.h - bottomReserve - y;
+    const int leftW = std::clamp((modal.w - pad * 2 - gap * 2) / 3, 230, 420);
+    const int midW = leftW;
+    const int rightW = modal.w - pad * 2 - gap * 2 - leftW - midW;
+    const SDL_Rect leftCard{modal.x + pad, y, leftW, cardH};
+    const SDL_Rect midCard{leftCard.x + leftCard.w + gap, y, midW, cardH};
+    const SDL_Rect rightCard{midCard.x + midCard.w + gap, y, rightW, cardH};
+
+    drawOCRImageCard("Original Image",
+                     "Open a PNG or JPG Sudoku image.",
+                     info.ocrOriginalPreview,
+                     ocrOriginalTexture,
+                     ocrOriginalTextureVersion,
+                     info.ocrPreviewVersion,
+                     leftCard);
+    drawOCRImageCard("Warped 9x9 Grid",
+                     "Detect grid to show a normalized preview. Use a clearer screenshot, crop closer, and avoid shadows if detection fails.",
+                     info.ocrWarpedGrid,
+                     ocrWarpedTexture,
+                     ocrWarpedTextureVersion,
+                     info.ocrPreviewVersion,
+                     midCard);
+
+    fillRect(rightCard, color(11, 20, 20, 226));
+    strokeRect(rightCard, color(71, 85, 105, 110), 1);
+    drawText("Review Board", rightCard.x + 14, rightCard.y + 12, fontSmall, theme.accent);
+    std::ostringstream stats;
+    stats << "Givens " << info.ocrGivens
+          << " | Low " << info.ocrLowConfidenceCount
+          << " | Conflicts " << info.ocrConflictCount;
+    drawWrappedText(stats.str(),
+                    SDL_Rect{rightCard.x + 14, rightCard.y + 38, rightCard.w - 28, 24},
+                    fontSmall,
+                    theme.textSecondary,
+                    2,
+                    1);
+
+    const int boardY = rightCard.y + 66;
+    const int boardSize = std::min(rightCard.w - 28, rightCard.h - 158);
+    const SDL_Rect boardRect{rightCard.x + (rightCard.w - boardSize) / 2, boardY, boardSize, boardSize};
+    cachedOCRReviewRect = boardRect;
+    drawOCRReviewBoard(info, boardRect);
+
+    const SDL_Rect validationRect{rightCard.x + 14,
+                                  boardRect.y + boardRect.h + 12,
+                                  rightCard.w - 28,
+                                  std::max(42, rightCard.y + rightCard.h - boardRect.y - boardRect.h - 24)};
+    SDL_Color validationColor = theme.textSecondary;
+    if (info.ocrConflictCount > 0) {
+        validationColor = theme.danger;
+    } else if (info.ocrLowConfidenceCount > 0) {
+        validationColor = theme.warning;
+    } else if (info.ocrCanConfirm) {
+        validationColor = theme.success;
+    }
+    drawWrappedText(info.ocrValidationText.empty() ? "OCR has not run." : info.ocrValidationText,
+                    validationRect,
+                    fontSmall,
+                    validationColor,
+                    3,
+                    3);
+
+    const int statusY = modal.y + modal.h - pad - 96;
+    drawLine(modal.x + pad,
+             statusY - 10,
+             modal.x + modal.w - pad,
+             statusY - 10,
+             color(theme.accent.r, theme.accent.g, theme.accent.b, 58),
+             1);
+    drawWrappedText(info.ocrStatusText,
+                    SDL_Rect{modal.x + pad, statusY, modal.w - pad * 2, 26},
+                    fontSmall,
+                    theme.textSecondary,
+                    2,
+                    1);
+    drawWrappedText("Limitations: clear screenshots work best. Perspective, shadows, blur, or handwriting may fail; review low-confidence cells before import.",
+                    SDL_Rect{modal.x + pad, statusY + 26, modal.w - pad * 2, 28},
+                    fontSmall,
+                    theme.textMuted,
+                    2,
+                    1);
+
+    (void)buttons;
+}
+
+void Renderer::drawOCRImageCard(const std::string& title,
+                                const std::string& emptyText,
+                                const cv::Mat* image,
+                                SDL_Texture*& texture,
+                                int& textureVersion,
+                                int sourceVersion,
+                                const SDL_Rect& rect) {
+    const Theme& theme = appTheme();
+    fillRect(rect, color(11, 20, 20, 226));
+    strokeRect(rect, color(71, 85, 105, 110), 1);
+    drawText(title, rect.x + 14, rect.y + 12, fontSmall, theme.accent);
+
+    const SDL_Rect inner{rect.x + 14, rect.y + 42, rect.w - 28, rect.h - 56};
+    fillRect(inner, color(4, 9, 10, 210));
+    strokeRect(inner, color(36, 54, 52, 130), 1);
+    if (!image || image->empty()) {
+        drawWrappedText(emptyText,
+                        SDL_Rect{inner.x + 14, inner.y + 14, inner.w - 28, inner.h - 28},
+                        fontSmall,
+                        theme.textMuted,
+                        3,
+                        5);
+        return;
+    }
+
+    if (textureVersion != sourceVersion) {
+        if (texture) {
+            SDL_DestroyTexture(texture);
+            texture = nullptr;
+        }
+        texture = createTextureFromMat(sdlRenderer, *image);
+        textureVersion = sourceVersion;
+    }
+    if (!texture) {
+        drawText("Preview texture failed.", inner.x + 14, inner.y + 14, fontSmall, theme.danger);
+        return;
+    }
+
+    const double sx = static_cast<double>(inner.w - 10) / static_cast<double>(image->cols);
+    const double sy = static_cast<double>(inner.h - 10) / static_cast<double>(image->rows);
+    const double scale = std::min(sx, sy);
+    const int drawW = std::max(1, static_cast<int>(image->cols * scale));
+    const int drawH = std::max(1, static_cast<int>(image->rows * scale));
+    const SDL_Rect dest{inner.x + (inner.w - drawW) / 2, inner.y + (inner.h - drawH) / 2, drawW, drawH};
+    SDL_RenderCopy(sdlRenderer, texture, nullptr, &dest);
+}
+
+void Renderer::drawOCRReviewBoard(const RenderInfo& info, const SDL_Rect& rect) {
+    const Theme& theme = appTheme();
+    const int cell = std::max(1, rect.w / Board::Size);
+    for (int r = 0; r < Board::Size; ++r) {
+        for (int c = 0; c < Board::Size; ++c) {
+            const OCRCell& ocr = info.ocrCells[static_cast<size_t>(r * Board::Size + c)];
+            SDL_Rect cellRect{rect.x + c * cell, rect.y + r * cell, cell, cell};
+            SDL_Color bg = color(8, 13, 14, 245);
+            SDL_Color fg = theme.textMuted;
+            if (ocr.conflict) {
+                bg = color(92, 21, 31, 230);
+                fg = theme.danger;
+            } else if (ocr.digit > 0 && ocr.lowConfidence) {
+                bg = color(74, 53, 16, 220);
+                fg = theme.warning;
+            } else if (ocr.digit > 0) {
+                bg = color(11, 35, 34, 230);
+                fg = theme.logic;
+            }
+            fillRect(cellRect, bg);
+            strokeRect(cellRect, color(70, 92, 88, 96), 1);
+            if (ocr.digit > 0) {
+                drawCenteredText(std::to_string(ocr.digit), cellRect, cell < 38 ? fontBody : fontNumber, fg);
+                if (ocr.lowConfidence) {
+                    std::ostringstream conf;
+                    conf << static_cast<int>(ocr.confidence * 100.0f);
+                    drawText(conf.str(), cellRect.x + 3, cellRect.y + 2, fontTiny, theme.warning);
+                }
+            }
+        }
+    }
+
+    for (int i = 0; i <= Board::Size; ++i) {
+        const int thickness = (i % 3 == 0) ? 2 : 1;
+        const SDL_Color line = (i % 3 == 0) ? theme.gridThick : color(86, 112, 108, 150);
+        drawLine(rect.x + i * cell, rect.y, rect.x + i * cell, rect.y + cell * Board::Size, line, thickness);
+        drawLine(rect.x, rect.y + i * cell, rect.x + cell * Board::Size, rect.y + i * cell, line, thickness);
+    }
+
+    if (Board::isInside(info.ocrSelectedRow, info.ocrSelectedCol)) {
+        SDL_Rect selected{rect.x + info.ocrSelectedCol * cell,
+                          rect.y + info.ocrSelectedRow * cell,
+                          cell,
+                          cell};
+        strokeRect(selected, theme.accent, 3);
+    }
+}
+
+SDL_Rect Renderer::ocrModalRect() const {
+    const int margin = std::clamp(std::min(layout.width, layout.height) / 28, 18, 34);
+    return SDL_Rect{margin, margin, layout.width - margin * 2, layout.height - margin * 2};
+}
+
+SDL_Rect Renderer::ocrReviewBoardRect() const {
+    const SDL_Rect modal = ocrModalRect();
+    const int pad = std::clamp(modal.w / 48, 14, 22);
+    const int y = modal.y + pad + 38 + 34 + 15;
+    const int bottomReserve = 100;
+    const int gap = 14;
+    const int cardH = modal.y + modal.h - bottomReserve - y;
+    const int leftW = std::clamp((modal.w - pad * 2 - gap * 2) / 3, 230, 420);
+    const int midW = leftW;
+    const int rightW = modal.w - pad * 2 - gap * 2 - leftW - midW;
+    const SDL_Rect rightCard{modal.x + pad + leftW + gap + midW + gap, y, rightW, cardH};
+    const int boardSize = std::min(rightCard.w - 28, rightCard.h - 158);
+    return SDL_Rect{rightCard.x + (rightCard.w - boardSize) / 2, rightCard.y + 66, boardSize, boardSize};
 }
 
 void Renderer::drawCandidates(const Board& board,

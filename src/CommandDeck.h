@@ -13,6 +13,7 @@ enum class CommandAction {
     ToggleSolverMode,
     ToggleCandidateDisplay,
     ToggleMistakeMode,
+    OCRImportImage,
     ImportClipboard,
     CopyPuzzle,
     CopySolution,

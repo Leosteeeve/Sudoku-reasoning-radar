@@ -3,304 +3,272 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Sudoku Reasoning Radar is a visual Sudoku engine that turns hidden logic into motion.">
+    <meta name="description" content="Sudoku Reasoning Radar is a visual Sudoku solver that turns candidates, logic, search, OCR import, and difficulty analysis into an animated reasoning trace.">
     <title>Sudoku Reasoning Radar</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <header class="site-header">
         <a class="brand" href="#top" aria-label="Sudoku Reasoning Radar home">
-            <span class="brand-mark"></span>
+            <span class="brand-mark" aria-hidden="true"></span>
             <span>Sudoku Reasoning Radar</span>
         </a>
         <nav class="nav-links" aria-label="Primary navigation">
-            <a href="#features">Features</a>
-            <a href="#algorithm">Algorithm</a>
-            <a href="#download">Download</a>
-            <a href="#roadmap">Roadmap</a>
+            <a href="#experience">Experience</a>
+            <a href="#workflow">Workflow</a>
+            <a href="#engine">Engine</a>
+            <a href="#release">Release</a>
         </nav>
     </header>
 
     <main id="top">
-        <section class="hero section-shell">
-            <div class="hero-radar" aria-hidden="true"></div>
-            <div class="hero-content reveal">
-                <p class="eyebrow">Visual Sudoku reasoning engine</p>
-                <h1>Sudoku Reasoning Radar</h1>
-                <p class="hero-copy">A visual Sudoku engine that turns hidden logic into motion.</p>
-                <p class="hero-statement">Not just a solver. It visualizes how logic collapses uncertainty into certainty.</p>
-                <div class="hero-actions" aria-label="Primary actions">
-                    <a class="button button-primary" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
-                        Download for Windows
-                    </a>
-                    <a class="button button-secondary" href="#github-link-placeholder">View on GitHub</a>
-                    <a class="button button-ghost" href="#features">See Features</a>
-                </div>
-                <p class="release-note">Latest release: <strong>v0.2.0</strong>. The stable release asset name is <code>SudokuReasoningRadar_Windows.zip</code>.</p>
-            </div>
-        </section>
-
-        <section class="preview-section section-shell" id="preview">
-            <div class="section-heading reveal">
-                <p class="eyebrow">Visual preview</p>
-                <h2>Watch uncertainty collapse cell by cell.</h2>
-                <p>The interface highlights rows, columns, boxes, candidates, contradictions, and backtracks as the engine moves through a puzzle.</p>
-            </div>
-
-            <div class="preview-frame reveal" id="previewFrame">
-                <img class="preview-screenshot" id="previewScreenshot" src="assets/screenshot.png" alt="Sudoku Reasoning Radar screenshot">
-                <div class="mockup-preview" id="mockupPreview" aria-label="Animated product mockup">
-                    <div class="mock-board" aria-hidden="true">
-                        <span class="scan-line"></span>
-                        <div class="cell given">5</div>
-                        <div class="cell cand"><i>1</i><i>2</i><i>4</i></div>
-                        <div class="cell cand active"><i>3</i><i>7</i><i>9</i></div>
-                        <div class="cell given">8</div>
-                        <div class="cell cand"><i>2</i><i>6</i><i>9</i></div>
-                        <div class="cell solved">4</div>
-                        <div class="cell cand"><i>1</i><i>6</i><i>7</i></div>
-                        <div class="cell given">9</div>
-                        <div class="cell cand"><i>2</i><i>3</i><i>6</i></div>
-                        <div class="cell cand"><i>2</i><i>3</i><i>6</i></div>
-                        <div class="cell given">7</div>
-                        <div class="cell solved pulse">1</div>
-                        <div class="cell cand"><i>4</i><i>5</i><i>9</i></div>
-                        <div class="cell cand"><i>3</i><i>6</i><i>8</i></div>
-                        <div class="cell given">2</div>
-                        <div class="cell cand"><i>4</i><i>8</i><i>9</i></div>
-                        <div class="cell solved">6</div>
-                        <div class="cell cand"><i>1</i><i>3</i><i>5</i></div>
-                        <div class="cell solved">9</div>
-                        <div class="cell cand"><i>1</i><i>4</i><i>6</i></div>
-                        <div class="cell given">3</div>
-                        <div class="cell cand"><i>1</i><i>5</i><i>8</i></div>
-                        <div class="cell solved">7</div>
-                        <div class="cell cand active"><i>2</i><i>4</i><i>5</i></div>
-                        <div class="cell given">6</div>
-                        <div class="cell cand"><i>1</i><i>5</i><i>8</i></div>
-                        <div class="cell solved">2</div>
-                        <div class="cell given">8</div>
-                        <div class="cell cand"><i>1</i><i>3</i><i>7</i></div>
-                        <div class="cell solved">5</div>
-                        <div class="cell cand"><i>2</i><i>4</i><i>9</i></div>
-                        <div class="cell given">6</div>
-                        <div class="cell cand"><i>1</i><i>3</i><i>4</i></div>
-                        <div class="cell solved pulse">9</div>
-                        <div class="cell cand"><i>2</i><i>7</i><i>8</i></div>
-                        <div class="cell given">3</div>
-                        <div class="cell cand"><i>1</i><i>4</i><i>7</i></div>
-                        <div class="cell solved">6</div>
-                        <div class="cell cand"><i>2</i><i>5</i><i>8</i></div>
-                        <div class="cell given">4</div>
-                        <div class="cell cand active"><i>1</i><i>3</i><i>9</i></div>
-                        <div class="cell solved">8</div>
-                        <div class="cell cand"><i>2</i><i>5</i><i>7</i></div>
-                        <div class="cell given">1</div>
-                        <div class="cell cand"><i>3</i><i>6</i><i>9</i></div>
-                        <div class="cell solved">2</div>
-                        <div class="cell cand"><i>3</i><i>4</i><i>8</i></div>
-                        <div class="cell given">6</div>
-                        <div class="cell cand"><i>1</i><i>7</i><i>9</i></div>
-                        <div class="cell solved pulse">5</div>
-                        <div class="cell cand"><i>2</i><i>3</i><i>8</i></div>
-                        <div class="cell given">7</div>
-                        <div class="cell cand"><i>1</i><i>4</i><i>9</i></div>
-                        <div class="cell cand"><i>2</i><i>5</i><i>6</i></div>
-                        <div class="cell given">1</div>
-                        <div class="cell cand"><i>4</i><i>7</i><i>9</i></div>
-                        <div class="cell solved">8</div>
-                        <div class="cell cand"><i>2</i><i>3</i><i>5</i></div>
-                        <div class="cell given">9</div>
-                        <div class="cell cand active"><i>1</i><i>4</i><i>6</i></div>
-                        <div class="cell solved">3</div>
-                        <div class="cell cand"><i>5</i><i>7</i><i>8</i></div>
-                        <div class="cell cand"><i>2</i><i>4</i><i>6</i></div>
-                        <div class="cell solved">7</div>
-                        <div class="cell cand"><i>1</i><i>3</i><i>5</i></div>
-                        <div class="cell given">9</div>
-                        <div class="cell cand"><i>2</i><i>4</i><i>8</i></div>
-                        <div class="cell solved">1</div>
-                        <div class="cell cand"><i>3</i><i>5</i><i>6</i></div>
-                        <div class="cell given">8</div>
-                        <div class="cell cand"><i>2</i><i>4</i><i>7</i></div>
-                        <div class="cell solved pulse">4</div>
-                        <div class="cell cand"><i>1</i><i>5</i><i>8</i></div>
-                        <div class="cell given">2</div>
-                        <div class="cell cand"><i>3</i><i>6</i><i>7</i></div>
-                        <div class="cell solved">9</div>
-                        <div class="cell cand"><i>1</i><i>4</i><i>5</i></div>
-                        <div class="cell given">6</div>
-                        <div class="cell cand"><i>2</i><i>3</i><i>8</i></div>
-                        <div class="cell solved">7</div>
-                        <div class="cell cand"><i>1</i><i>5</i><i>9</i></div>
-                    </div>
-                    <aside class="mock-panel">
-                        <div class="panel-title">Reasoning Radar</div>
-                        <div class="metric-row"><span>Mode</span><strong>Smart Solver</strong></div>
-                        <div class="metric-row"><span>Status</span><strong>Playing Steps</strong></div>
-                        <div class="metric-row"><span>Technique</span><strong id="techniqueBadge">Naked Single</strong></div>
-                        <div class="step-card">
-                            <span id="stepCounter">Step 18</span>
-                            <p>Candidate pressure reveals a forced placement.</p>
+        <section class="hero">
+            <div class="hero-grid" aria-hidden="true"></div>
+            <div class="hero-inner section-shell">
+                <div class="hero-copy reveal">
+                    <p class="eyebrow">Visual Sudoku reasoning engine</p>
+                    <div class="title-cluster">
+                        <h1>Sudoku Reasoning Radar</h1>
+                        <div class="title-orbit" aria-hidden="true">
+                            <span></span>
+                            <span></span>
+                            <span></span>
                         </div>
-                        <div class="mini-timeline"><span></span></div>
-                    </aside>
+                    </div>
+                    <p class="hero-lede">A Windows C++ solver that makes every candidate, deduction, guess, contradiction, and backtrack visible.</p>
+                    <div class="hero-actions" aria-label="Primary actions">
+                        <a class="button button-primary" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
+                            Download Windows ZIP
+                        </a>
+                        <a class="button button-secondary" href="#experience">Watch The Flow</a>
+                        <a class="button button-ghost" href="#github-link-placeholder">GitHub</a>
+                    </div>
+                    <div class="hero-status" aria-label="Release highlights">
+                        <span>v0.2.1 OCR Import</span>
+                        <span>3 solver modes</span>
+                        <span>Animated trace playback</span>
+                    </div>
+                </div>
+
+                <div class="radar-stage reveal" aria-label="Animated Sudoku reasoning preview">
+                    <div class="radar-scope">
+                        <div class="scope-ring ring-one"></div>
+                        <div class="scope-ring ring-two"></div>
+                        <div class="scope-ring ring-three"></div>
+                        <div class="scope-sweep"></div>
+                        <div class="signal signal-a"></div>
+                        <div class="signal signal-b"></div>
+                        <div class="signal signal-c"></div>
+                    </div>
+
+                    <div class="demo-shell">
+                        <div class="demo-board" data-demo-board></div>
+                        <aside class="demo-panel">
+                            <p class="panel-kicker">Live trace</p>
+                            <h2 id="demoTechnique">Naked Single</h2>
+                            <p id="demoReason">Only one candidate survives the row, column, and box masks.</p>
+                            <div class="trace-stack">
+                                <span id="demoStep">Step 18</span>
+                                <span id="demoCell">r4c7 = 5</span>
+                                <span id="demoDepth">Depth 0</span>
+                            </div>
+                            <div class="trace-meter"><span id="demoMeter"></span></div>
+                        </aside>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <section class="features section-shell" id="features">
-            <div class="section-heading reveal">
-                <p class="eyebrow">Features</p>
-                <h2>Built for seeing the reason, not just the answer.</h2>
-            </div>
-            <div class="card-grid">
-                <article class="feature-card reveal">
-                    <h3>Visual Reasoning Playback</h3>
-                    <p>Replay solver decisions as highlighted cells, units, placements, contradictions, and backtracks.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Human Logic Mode</h3>
-                    <p>Follow human-style techniques before any guessing enters the picture.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Smart Solver Mode</h3>
-                    <p>Combine logic propagation with MRV search for a clear and reliable solve path.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Turbo Exact Cover Mode</h3>
-                    <p>Use an exact-cover engine when speed and uniqueness checks matter most.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Candidate Radar</h3>
-                    <p>Switch between focused, full, and hidden candidate displays to control visual density.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Puzzle Generator</h3>
-                    <p>Create fresh puzzles by difficulty, with uniqueness checks and tracked seed metadata.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Hint Coach</h3>
-                    <p>Ask for gentle, technique, or direct hints without revealing the whole solution path.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Difficulty Analyzer</h3>
-                    <p>Score puzzles from the recorded solve trace, including hardest technique and branch depth.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Import / Export Puzzle Strings</h3>
-                    <p>Paste or type standard 81-character Sudoku strings in the in-app drawer, then import or copy puzzles without leaving the tool.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Mistake Detection</h3>
-                    <p>Highlight rule conflicts or compare player entries against a cached unique solution.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Local Puzzle Library</h3>
-                    <p>Save generated or imported puzzles locally in a simple text file format.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Cleaner Command Deck</h3>
-                    <p>Replace the old button wall with one focused action, a short description, and a single Execute control.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Dedicated Panels</h3>
-                    <p>Settings, analytics, library, import/export, generator, and shortcuts now live in clean drawer pages.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Reduced Visual Clutter</h3>
-                    <p>The board and current reasoning step stay central while lower-frequency tools stay tucked away.</p>
-                </article>
-                <article class="feature-card reveal">
-                    <h3>Fullscreen Responsive UI</h3>
-                    <p>The desktop interface adapts from compact windows to fullscreen displays.</p>
-                </article>
-            </div>
+        <section class="signal-strip section-shell" aria-label="Product summary">
+            <article class="signal-card reveal">
+                <strong>Bitmask core</strong>
+                <span>Row, column, and box masks reduce candidate checks to fast integer operations.</span>
+            </article>
+            <article class="signal-card reveal">
+                <strong>Human-readable trace</strong>
+                <span>The solver records steps; the UI replays them as an explainable sequence.</span>
+            </article>
+            <article class="signal-card reveal">
+                <strong>OCR to playable board</strong>
+                <span>OpenCV and Tesseract turn clear screenshots into editable puzzles.</span>
+            </article>
         </section>
 
-        <section class="algorithm section-shell" id="algorithm">
+        <section class="experience section-shell" id="experience">
             <div class="section-heading reveal">
-                <p class="eyebrow">Algorithm</p>
-                <h2>A hybrid engine under the radar display.</h2>
+                <p class="eyebrow">Experience</p>
+                <h2>Less reading. More seeing.</h2>
+                <p>Instead of explaining Sudoku in paragraphs, the app shows the pressure on each cell: scan focus, unit highlights, candidate removals, placements, assumptions, and recovery from failed branches.</p>
             </div>
-            <div class="algorithm-grid reveal">
-                <div class="algorithm-copy">
-                    <p>Sudoku Reasoning Radar keeps the solver and animation layers separate. The engine records decisions; the interface turns those decisions into a readable sequence.</p>
-                    <ul class="check-list">
-                        <li>Bitmask candidate engine</li>
-                        <li>Constraint propagation</li>
-                        <li>Human-style logical techniques</li>
-                        <li>MRV backtracking</li>
-                        <li>Exact Cover / Turbo mode</li>
-                        <li>Unique, multiple, invalid, and no-solution detection</li>
-                        <li>Generation, hints, analysis, import/export, and local library workflow</li>
-                    </ul>
-                </div>
-                <div class="code-panel" aria-label="Algorithm summary">
-                    <p><span>used</span> = rowMask | colMask | boxMask</p>
-                    <p><span>candidates</span> = (~used) &amp; 0x1FF</p>
-                    <p><span>logic</span> -> singles, pairs, locked candidates</p>
-                    <p><span>search</span> -> choose MRV cell, branch, verify</p>
+
+            <div class="experience-grid">
+                <figure class="product-shot reveal">
+                    <img src="assets/screenshot.png" alt="Sudoku Reasoning Radar application screenshot">
+                    <figcaption>Resizable desktop UI with board, drawers, command deck, OCR review, and animated reasoning playback.</figcaption>
+                </figure>
+
+                <div class="feature-rail reveal" aria-label="Feature highlights">
+                    <div class="rail-item active" data-feature-index="0">
+                        <span>01</span>
+                        <strong>Reasoning playback</strong>
+                        <p>Step forward, rewind, pause, or let the trace play automatically.</p>
+                    </div>
+                    <div class="rail-item" data-feature-index="1">
+                        <span>02</span>
+                        <strong>Command Deck</strong>
+                        <p>One focused action at a time replaces crowded control walls.</p>
+                    </div>
+                    <div class="rail-item" data-feature-index="2">
+                        <span>03</span>
+                        <strong>OCR review board</strong>
+                        <p>Import an image, inspect confidence, fix cells, then confirm.</p>
+                    </div>
+                    <div class="rail-item" data-feature-index="3">
+                        <span>04</span>
+                        <strong>Analytics drawer</strong>
+                        <p>Difficulty, score, technique counts, guesses, and backtracks stay available without cluttering the board.</p>
+                    </div>
                 </div>
             </div>
         </section>
 
-        <section class="interaction section-shell" id="interaction">
+        <section class="workflow section-shell" id="workflow">
             <div class="section-heading reveal">
-                <p class="eyebrow">Interaction</p>
-                <h2>Explore a puzzle like an instrument panel.</h2>
+                <p class="eyebrow">Workflow</p>
+                <h2>From puzzle input to explainable solution.</h2>
             </div>
-            <div class="interaction-list reveal">
-                <span>Enter puzzles visually</span>
-                <span>Watch reasoning steps</span>
-                <span>Step forward and backward</span>
-                <span>Toggle candidate modes</span>
-                <span>Generate unique puzzles</span>
-                <span>Ask for layered hints</span>
-                <span>Analyze difficulty</span>
-                <span>Import/export puzzle strings</span>
-                <span>Check mistakes</span>
-                <span>Save puzzles locally</span>
-                <span>Use the Command Deck</span>
-                <span>Open dedicated overlay panels</span>
-                <span>Switch solving modes</span>
-                <span>Use fullscreen</span>
+
+            <div class="flow-map reveal" aria-label="Application workflow">
+                <article class="flow-step">
+                    <span>Input</span>
+                    <strong>Click cells, paste strings, load examples, or import images.</strong>
+                </article>
+                <article class="flow-step">
+                    <span>Detect</span>
+                    <strong>Validate givens, detect conflicts, and build candidate masks.</strong>
+                </article>
+                <article class="flow-step">
+                    <span>Reason</span>
+                    <strong>Apply singles, pairs, locked candidates, X-Wing, and MRV search.</strong>
+                </article>
+                <article class="flow-step">
+                    <span>Replay</span>
+                    <strong>Animate placements, removals, guesses, contradictions, and backtracks.</strong>
+                </article>
+                <article class="flow-step">
+                    <span>Analyze</span>
+                    <strong>Report uniqueness, difficulty, technique stats, and branch depth.</strong>
+                </article>
             </div>
         </section>
 
-        <section class="download section-shell" id="download">
-            <div class="download-card reveal">
+        <section class="engine section-shell" id="engine">
+            <div class="section-heading reveal">
+                <p class="eyebrow">Engine</p>
+                <h2>Fast solver core. Separate visual layer.</h2>
+                <p>The solver does not drive the animation directly. It records structured steps; the interface decides how to present them.</p>
+            </div>
+
+            <div class="engine-grid">
+                <div class="pipeline reveal" aria-label="Solver pipeline">
+                    <div class="pipeline-node">
+                        <span>01</span>
+                        <strong>Bitmask candidates</strong>
+                        <code>candidates = (~used) &amp; 0x1FF</code>
+                    </div>
+                    <div class="pipeline-node">
+                        <span>02</span>
+                        <strong>Constraint propagation</strong>
+                        <code>Naked / Hidden Single</code>
+                    </div>
+                    <div class="pipeline-node">
+                        <span>03</span>
+                        <strong>Human techniques</strong>
+                        <code>Pairs, locked candidates, X-Wing</code>
+                    </div>
+                    <div class="pipeline-node">
+                        <span>04</span>
+                        <strong>MRV search</strong>
+                        <code>Fewest candidates first</code>
+                    </div>
+                    <div class="pipeline-node">
+                        <span>05</span>
+                        <strong>Result classification</strong>
+                        <code>Unique / Multiple / Invalid / None</code>
+                    </div>
+                </div>
+
+                <div class="mode-matrix reveal">
+                    <article>
+                        <span>Human Logic</span>
+                        <strong>No guesses</strong>
+                        <p>Best for learning the reasoning path.</p>
+                    </article>
+                    <article>
+                        <span>Smart Solver</span>
+                        <strong>Logic + MRV</strong>
+                        <p>The default mode for reliable animated solving.</p>
+                    </article>
+                    <article>
+                        <span>Turbo Exact Cover</span>
+                        <strong>Algorithm X</strong>
+                        <p>Built for speed, uniqueness checks, and generation support.</p>
+                    </article>
+                    <article>
+                        <span>OCR Assistant</span>
+                        <strong>OpenCV + Tesseract</strong>
+                        <p>Image import with review before committing to the board.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section class="capabilities section-shell">
+            <div class="section-heading reveal">
+                <p class="eyebrow">Capabilities</p>
+                <h2>A complete desktop tool, not a one-button solver.</h2>
+            </div>
+
+            <div class="capability-grid">
+                <article class="capability-card reveal">
+                    <span>Visual</span>
+                    <strong>Radar scan, highlighted units, candidate fading, placement pulse, contradiction color, and branch rewind.</strong>
+                </article>
+                <article class="capability-card reveal">
+                    <span>Input</span>
+                    <strong>Mouse editing, keyboard entry, built-in puzzles, 81-character strings, OCR images, and local library saves.</strong>
+                </article>
+                <article class="capability-card reveal">
+                    <span>Guidance</span>
+                    <strong>Hint Coach levels, mistake modes, difficulty scoring, technique stats, and step timeline control.</strong>
+                </article>
+                <article class="capability-card reveal">
+                    <span>Packaging</span>
+                    <strong>v0.2.1 release uses automatic MSYS2 DLL dependency collection and includes tessdata for OCR.</strong>
+                </article>
+            </div>
+        </section>
+
+        <section class="release section-shell" id="release">
+            <div class="release-card reveal">
                 <div>
-                    <p class="eyebrow">Download</p>
-                    <h2>Windows build</h2>
-                    <p class="version">Latest release: <strong>v0.2.0</strong></p>
-                    <p>Requirements: Windows 10/11. SDL2 DLLs should be included in the release package.</p>
-                    <p class="download-note">Formal downloads are recommended through GitHub Releases. Keep the asset filename stable so the latest-release link keeps working.</p>
+                    <p class="eyebrow">Release</p>
+                    <h2>Download the Windows build.</h2>
+                    <p>Latest package: <strong>v0.2.1</strong>. Keep the DLL files and <code>tessdata</code> folder next to the executable.</p>
                 </div>
-                <a class="button button-primary large" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
-                    Download Windows ZIP
-                </a>
-            </div>
-        </section>
-
-        <section class="roadmap section-shell" id="roadmap">
-            <div class="section-heading reveal">
-                <p class="eyebrow">Roadmap</p>
-                <h2>Next signals on the radar.</h2>
-            </div>
-            <div class="roadmap-grid reveal">
-                <span>Advanced generator tuning</span>
-                <span>Hint Coach explanations</span>
-                <span>Difficulty history</span>
-                <span>WebAssembly browser version</span>
-                <span>Daily Challenge</span>
-                <span>Puzzle Library</span>
+                <div class="release-actions">
+                    <a class="button button-primary large" href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip" download>
+                        Download Windows ZIP
+                    </a>
+                    <a class="button button-secondary large" href="#github-link-placeholder">View Source</a>
+                </div>
             </div>
         </section>
     </main>
 
     <footer class="site-footer">
-        <p>Made by Leo Deng · Project: Sudoku Reasoning Radar · <a href="#github-link-placeholder">GitHub link placeholder</a> · 2026</p>
+        <p>Sudoku Reasoning Radar. Windows C++17, SDL2, SDL2_ttf, OpenCV, and Tesseract.</p>
+        <a href="#github-link-placeholder">GitHub link placeholder</a>
     </footer>
 
     <script src="script.js"></script>

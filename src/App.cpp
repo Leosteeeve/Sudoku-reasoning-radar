@@ -1,7 +1,15 @@
 #include "App.h"
 
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+
+#include <windows.h>
+#include <commdlg.h>
+
 #include <algorithm>
 #include <cctype>
+#include <filesystem>
 #include <iomanip>
 #include <sstream>
 
@@ -34,6 +42,51 @@ std::string sanitizePuzzleEntryText(const std::string& text) {
         }
     }
     return compact;
+}
+
+std::string stripPathQuotes(const std::string& text) {
+    std::string out = text;
+    out.erase(out.begin(), std::find_if(out.begin(), out.end(), [](unsigned char ch) {
+                  return std::isspace(ch) == 0;
+              }));
+    out.erase(std::find_if(out.rbegin(), out.rend(), [](unsigned char ch) {
+                  return std::isspace(ch) == 0;
+              }).base(),
+              out.end());
+    if (out.size() >= 2 && out.front() == '"' && out.back() == '"') {
+        out = out.substr(1, out.size() - 2);
+    }
+    return out;
+}
+
+std::string solveResultName(SolveResult result) {
+    switch (result) {
+    case SolveResult::InvalidInput:
+        return "Invalid conflict";
+    case SolveResult::NoSolution:
+        return "No solution";
+    case SolveResult::SolvedUnique:
+        return "Unique solution";
+    case SolveResult::MultipleSolutions:
+        return "Multiple solutions";
+    }
+    return "Unknown";
+}
+
+std::string openImageFileDialog() {
+    char fileName[MAX_PATH] = {};
+    OPENFILENAMEA dialog{};
+    dialog.lStructSize = sizeof(dialog);
+    dialog.hwndOwner = nullptr;
+    dialog.lpstrFilter = "Image Files (*.png;*.jpg;*.jpeg)\0*.png;*.jpg;*.jpeg\0All Files (*.*)\0*.*\0";
+    dialog.lpstrFile = fileName;
+    dialog.nMaxFile = MAX_PATH;
+    dialog.Flags = OFN_FILEMUSTEXIST | OFN_PATHMUSTEXIST | OFN_NOCHANGEDIR;
+    dialog.lpstrTitle = "Open Sudoku Image";
+    if (GetOpenFileNameA(&dialog) == TRUE) {
+        return fileName;
+    }
+    return {};
 }
 }
 
@@ -177,6 +230,21 @@ void App::handleKeyDown(SDL_Keycode key) {
         }
         return;
     }
+    if (currentOverlay == OverlayPage::OCRImport) {
+        if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
+            confirmOCRImport();
+        } else if (key == SDLK_BACKSPACE || key == SDLK_DELETE) {
+            clearSelectedOCRCell();
+        } else {
+            const int number = keyToNumber(key);
+            if (number > 0) {
+                editSelectedOCRCell(number);
+            } else if (number == 0) {
+                clearSelectedOCRCell();
+            }
+        }
+        return;
+    }
     if (currentOverlay == OverlayPage::ImportExport && importTextEditing) {
         if (ctrl && key == SDLK_v) {
             pasteClipboardToImportBox();
@@ -191,6 +259,10 @@ void App::handleKeyDown(SDL_Keycode key) {
         } else if (key == SDLK_RETURN || key == SDLK_KP_ENTER) {
             importPuzzleFromTextBox();
         }
+        return;
+    }
+    if (key == SDLK_o) {
+        openOCRImportOverlay();
         return;
     }
     if (key == SDLK_TAB) {
@@ -356,6 +428,15 @@ void App::handleMouseDown(int x, int y) {
         return;
     }
 
+    if (currentOverlay == OverlayPage::OCRImport) {
+        int row = -1;
+        int col = -1;
+        if (renderer.ocrCellFromPoint(x, y, row, col)) {
+            ocrReview.selectCell(row, col);
+        }
+        return;
+    }
+
     if (currentOverlay != OverlayPage::None) {
         return;
     }
@@ -412,6 +493,24 @@ void App::activateButton(const std::string& id) {
         copyCurrentPuzzleString();
     } else if (id == "overlay_copy_solution") {
         copyCurrentSolutionString();
+    } else if (id == "overlay_ocr_open") {
+        chooseOCRImage();
+    } else if (id == "overlay_ocr_path_clip") {
+        importOCRPathFromClipboard();
+    } else if (id == "overlay_ocr_detect") {
+        detectOCRGrid();
+    } else if (id == "overlay_ocr_run") {
+        runOCRCells();
+    } else if (id == "overlay_ocr_auto") {
+        autoProcessOCR();
+    } else if (id == "overlay_ocr_clear") {
+        clearSelectedOCRCell();
+    } else if (id == "overlay_ocr_confirm") {
+        confirmOCRImport();
+    } else if (id == "overlay_ocr_debug") {
+        toggleOCRDebug();
+    } else if (id == "overlay_ocr_cancel") {
+        closeOverlay();
     } else if (id == "solve") {
         startSolve();
     } else if (id == "mode") {
@@ -501,6 +600,20 @@ void App::render() {
     info.overlayInputText = importTextBuffer;
     info.overlayInputActive = currentOverlay == OverlayPage::ImportExport && importTextEditing;
     info.overlayLines = overlayLines();
+    info.ocrStatusText = ocrStatus;
+    info.ocrValidationText = ocrReview.validationMessage();
+    info.ocrImagePath = ocrImagePath;
+    info.ocrCells = ocrReview.cells();
+    info.ocrGivens = ocrReview.givens();
+    info.ocrLowConfidenceCount = ocrReview.lowConfidenceCount();
+    info.ocrConflictCount = ocrReview.conflictCount();
+    info.ocrSelectedRow = ocrReview.selectedRow();
+    info.ocrSelectedCol = ocrReview.selectedCol();
+    info.ocrPreviewVersion = ocrPreviewVersion;
+    info.ocrDebug = ocrDebug;
+    info.ocrCanConfirm = ocrReview.canConfirmImport();
+    info.ocrOriginalPreview = &ocrResult.originalPreview;
+    info.ocrWarpedGrid = &ocrResult.warpedGrid;
     info.solvingTimeMs = lastSolveMs;
     info.selectedRow = selectedRow;
     info.selectedCol = selectedCol;
@@ -772,6 +885,177 @@ void App::appendImportText(const std::string& text) {
     ioStatus = status.str();
 }
 
+void App::openOCRImportOverlay() {
+    openOverlay(OverlayPage::OCRImport);
+    ocrStatus = ocrStatus.empty() ? "OCR: not run." : ocrStatus;
+}
+
+void App::chooseOCRImage() {
+    const std::string path = openImageFileDialog();
+    if (path.empty()) {
+        ocrStatus = "OCR: image selection cancelled.";
+        return;
+    }
+
+    ocrImagePath = path;
+    if (ocrImport.loadImage(ocrImagePath, ocrResult)) {
+        ocrReview.clear();
+        ++ocrPreviewVersion;
+        ocrStatus = "OCR: image loaded. Detect grid or run Auto Process.";
+    } else {
+        ++ocrPreviewVersion;
+        ocrStatus = "OCR: " + ocrResult.errorMessage;
+    }
+}
+
+void App::importOCRPathFromClipboard() {
+    if (!SDL_HasClipboardText()) {
+        ocrStatus = "OCR: clipboard does not contain an image path.";
+        return;
+    }
+
+    char* raw = SDL_GetClipboardText();
+    if (!raw) {
+        ocrStatus = "OCR: failed to read clipboard path.";
+        return;
+    }
+    ocrImagePath = stripPathQuotes(raw);
+    SDL_free(raw);
+
+    if (ocrImagePath.empty()) {
+        ocrStatus = "OCR: clipboard path is empty.";
+        return;
+    }
+    if (ocrImport.loadImage(ocrImagePath, ocrResult)) {
+        ocrReview.clear();
+        ++ocrPreviewVersion;
+        ocrStatus = "OCR: image loaded from clipboard path.";
+    } else {
+        ++ocrPreviewVersion;
+        ocrStatus = "OCR: " + ocrResult.errorMessage;
+    }
+}
+
+void App::detectOCRGrid() {
+    if (ocrImagePath.empty() && ocrResult.originalPreview.empty()) {
+        chooseOCRImage();
+        if (ocrResult.originalPreview.empty()) {
+            return;
+        }
+    }
+    OCRProcessOptions options;
+    options.debug = ocrDebug;
+    if (ocrResult.originalPreview.empty() && !ocrImport.loadImage(ocrImagePath, ocrResult)) {
+        ocrStatus = "OCR: " + ocrResult.errorMessage;
+        ++ocrPreviewVersion;
+        return;
+    }
+    if (ocrImport.detectGrid(ocrResult, options)) {
+        ++ocrPreviewVersion;
+        ocrStatus = "OCR: grid detected. Run OCR to recognize digits.";
+    } else {
+        ++ocrPreviewVersion;
+        ocrStatus = "OCR: " + ocrResult.errorMessage;
+    }
+}
+
+void App::runOCRCells() {
+    OCRProcessOptions options;
+    options.debug = ocrDebug;
+    if (ocrResult.warpedGrid.empty()) {
+        detectOCRGrid();
+        if (ocrResult.warpedGrid.empty()) {
+            return;
+        }
+    }
+    if (ocrImport.runOCR(ocrResult, options)) {
+        ocrReview.loadResult(ocrResult);
+        ++ocrPreviewVersion;
+        std::ostringstream out;
+        out << "OCR: " << ocrReview.givens() << " givens, "
+            << ocrReview.lowConfidenceCount() << " low-confidence";
+        if (ocrReview.conflictCount() > 0) {
+            out << ", conflict detected";
+        }
+        out << ".";
+        ocrStatus = out.str();
+    } else {
+        ++ocrPreviewVersion;
+        ocrStatus = "OCR: " + ocrResult.errorMessage;
+    }
+}
+
+void App::autoProcessOCR() {
+    if (ocrImagePath.empty()) {
+        chooseOCRImage();
+        if (ocrImagePath.empty()) {
+            return;
+        }
+    }
+
+    OCRProcessOptions options;
+    options.debug = ocrDebug;
+    if (ocrImport.autoProcess(ocrImagePath, ocrResult, options)) {
+        ocrReview.loadResult(ocrResult);
+        ++ocrPreviewVersion;
+        std::ostringstream out;
+        out << "OCR: " << ocrReview.givens() << " givens, "
+            << ocrReview.lowConfidenceCount() << " low-confidence, "
+            << solveResultName(ocrReview.validationResult()) << ".";
+        ocrStatus = out.str();
+    } else {
+        ++ocrPreviewVersion;
+        ocrStatus = "OCR: " + ocrResult.errorMessage;
+    }
+}
+
+void App::confirmOCRImport() {
+    if (!ocrReview.canConfirmImport()) {
+        ocrStatus = "OCR: fix red conflict cells before confirming import.";
+        return;
+    }
+
+    editBoard = ocrReview.toBoard();
+    initialBoard = editBoard;
+    replayBoard = editBoard;
+    resetSnapshot = editBoard;
+    puzzleName = "OCR Imported Puzzle";
+    selectedRow = -1;
+    selectedCol = -1;
+    markAllGivens();
+    clearSolutionState();
+    ioStatus = "Imported puzzle from OCR review board.";
+    ocrStatus = "OCR: imported successfully. " + ocrReview.validationMessage();
+    closeOverlay();
+}
+
+void App::clearSelectedOCRCell() {
+    int row = -1;
+    int col = -1;
+    if (!ocrReview.selectedCell(row, col)) {
+        ocrStatus = "OCR: select a review cell first.";
+        return;
+    }
+    ocrReview.clearCell(row, col);
+    ocrStatus = "OCR: cleared selected cell.";
+}
+
+void App::toggleOCRDebug() {
+    ocrDebug = !ocrDebug;
+    ocrStatus = std::string("OCR Debug: ") + (ocrDebug ? "On. Intermediate images save to data/ocr_debug/." : "Off.");
+}
+
+void App::editSelectedOCRCell(int number) {
+    int row = -1;
+    int col = -1;
+    if (!ocrReview.selectedCell(row, col)) {
+        ocrStatus = "OCR: select a review cell first.";
+        return;
+    }
+    ocrReview.editCell(row, col, number);
+    ocrStatus = "OCR: edited selected cell.";
+}
+
 void App::copyCurrentPuzzleString() {
     PuzzleIO::copyPuzzleToClipboard(editBoard, &ioStatus);
 }
@@ -866,6 +1150,9 @@ void App::openOverlay(OverlayPage page) {
             ioStatus = "Import box ready. Type or paste 81 characters.";
         }
     }
+    if (page == OverlayPage::OCRImport && ocrStatus == "OCR: not run.") {
+        ocrStatus = "OCR: open a PNG or JPG Sudoku image.";
+    }
     if (page == OverlayPage::Library) {
         libraryVisible = true;
         puzzleLibrary.load(&libraryStatus);
@@ -952,6 +1239,9 @@ void App::executeCommand(CommandAction action) {
         break;
     case CommandAction::ToggleMistakeMode:
         cycleMistakeMode();
+        break;
+    case CommandAction::OCRImportImage:
+        openOCRImportOverlay();
         break;
     case CommandAction::ImportClipboard:
         openOverlay(OverlayPage::ImportExport);
@@ -1136,7 +1426,17 @@ std::vector<UIButton> App::makeButtons() const {
         std::vector<UIButton> overlayButtons = {
             UIButton{"overlay_close", "Close", SDL_Rect{0, 0, 0, 0}, true}
         };
-        if (currentOverlay == OverlayPage::ImportExport) {
+        if (currentOverlay == OverlayPage::OCRImport) {
+            overlayButtons.push_back(UIButton{"overlay_ocr_open", "Open Image", SDL_Rect{0, 0, 0, 0}, true});
+            overlayButtons.push_back(UIButton{"overlay_ocr_path_clip", "Path Clip", SDL_Rect{0, 0, 0, 0}, true});
+            overlayButtons.push_back(UIButton{"overlay_ocr_detect", "Detect Grid", SDL_Rect{0, 0, 0, 0}, !ocrResult.originalPreview.empty() || !ocrImagePath.empty()});
+            overlayButtons.push_back(UIButton{"overlay_ocr_run", "Run OCR", SDL_Rect{0, 0, 0, 0}, !ocrResult.warpedGrid.empty() || !ocrResult.originalPreview.empty() || !ocrImagePath.empty()});
+            overlayButtons.push_back(UIButton{"overlay_ocr_auto", "Auto Process", SDL_Rect{0, 0, 0, 0}, true});
+            overlayButtons.push_back(UIButton{"overlay_ocr_clear", "Clear Cell", SDL_Rect{0, 0, 0, 0}, Board::isInside(ocrReview.selectedRow(), ocrReview.selectedCol())});
+            overlayButtons.push_back(UIButton{"overlay_ocr_confirm", "Confirm", SDL_Rect{0, 0, 0, 0}, ocrReview.canConfirmImport()});
+            overlayButtons.push_back(UIButton{"overlay_ocr_debug", ocrDebug ? "Debug On" : "Debug Off", SDL_Rect{0, 0, 0, 0}, true});
+            overlayButtons.push_back(UIButton{"overlay_ocr_cancel", "Cancel", SDL_Rect{0, 0, 0, 0}, true});
+        } else if (currentOverlay == OverlayPage::ImportExport) {
             overlayButtons.push_back(UIButton{"overlay_paste_clipboard", "Paste", SDL_Rect{0, 0, 0, 0}, true});
             overlayButtons.push_back(UIButton{"overlay_import_text", "Import", SDL_Rect{0, 0, 0, 0}, true});
             overlayButtons.push_back(UIButton{"overlay_copy_puzzle", "Copy Puzzle", SDL_Rect{0, 0, 0, 0}, true});
@@ -1296,6 +1596,9 @@ std::string App::focusText() const {
     if (currentHint.available) {
         return "Hint: " + currentHint.message;
     }
+    if (!ocrStatus.empty() && ocrStatus != "OCR: not run.") {
+        return ocrStatus;
+    }
     if (!steps.empty() && currentStep >= 0 && currentStep < static_cast<int>(steps.size())) {
         const SolveStep& step = steps[static_cast<size_t>(currentStep)];
         std::ostringstream out;
@@ -1328,7 +1631,22 @@ std::string App::shortStatusText() const {
     if (!generatorStatus.empty() && generatorStatus.find("Generated") != std::string::npos) {
         return generatorStatus;
     }
+    if (!ocrStatus.empty() && ocrStatus != "OCR: not run.") {
+        return ocrStatus;
+    }
     return statusText();
+}
+
+std::string App::ocrText() const {
+    std::ostringstream out;
+    out << ocrStatus
+        << " | Givens " << ocrReview.givens()
+        << " | Low " << ocrReview.lowConfidenceCount()
+        << " | Conflicts " << ocrReview.conflictCount();
+    if (!ocrImagePath.empty()) {
+        out << " | " << ocrImagePath;
+    }
+    return out.str();
 }
 
 std::string App::overlayBodyText() const {
@@ -1353,6 +1671,7 @@ std::vector<std::string> App::overlayLines() const {
             "Solver",
             "Solver mode: " + solverModeText(),
             "Mistake mode: " + mistakeModeText(),
+            std::string("OCR Debug: ") + (ocrDebug ? "On" : "Off"),
             "",
             "Controls",
             paused ? "Autoplay: Paused" : "Autoplay: Ready",
@@ -1421,11 +1740,30 @@ std::vector<std::string> App::overlayLines() const {
             "Input format",
             "Type or paste 81 characters. Digits 1-9 are givens; 0 or . are empty cells.",
             "Enter imports the text box. Delete clears it. Ctrl+V pastes into it.",
+            "Use OCR Import for PNG/JPG Sudoku screenshots.",
             "",
             "Current puzzle",
             PuzzleIO::boardToString(editBoard),
             "",
             ioStatus
+        };
+        break;
+    case OverlayPage::OCRImport:
+        lines = {
+            "Workflow",
+            "Open Image -> Detect Grid -> Run OCR -> Review cells -> Confirm Import.",
+            "Auto Process runs the full pipeline in one step.",
+            "",
+            "Review",
+            "Click a cell, press 1-9 to correct it, or Backspace/Delete/0 to clear.",
+            "Low-confidence cells are amber. Rule conflicts are red.",
+            "",
+            "Limitations",
+            "OCR is best for clear screenshots or straight photos of printed Sudoku grids.",
+            "Strong perspective, shadows, blur, or handwriting may fail.",
+            "Manual correction is part of the intended workflow.",
+            "",
+            ocrText()
         };
         break;
     case OverlayPage::Shortcuts:
@@ -1435,6 +1773,7 @@ std::vector<std::string> App::overlayLines() const {
             "Enter: Execute selected command",
             "Left / Right: Step playback or command action",
             "Tab / Shift+Tab: Cycle command action",
+            "O: OCR Import Assistant",
             "Esc: Close overlay / quit",
             "",
             "Puzzle",

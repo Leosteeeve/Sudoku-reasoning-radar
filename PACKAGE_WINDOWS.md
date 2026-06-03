@@ -1,6 +1,6 @@
 # Windows Release Packaging
 
-This guide explains how to create a downloadable Windows ZIP for Sudoku Reasoning Radar.
+This guide explains how to create a downloadable Windows ZIP for Sudoku Reasoning Radar v0.2.1.
 
 ## Safety
 
@@ -8,31 +8,22 @@ This guide explains how to create a downloadable Windows ZIP for Sudoku Reasonin
 - Review the release folder before publishing or uploading it.
 - If you use GitHub Releases, upload only the final ZIP file you intend to share.
 
-## Expected Release Contents
+## Required Packaging Tool
 
-The Windows release package should include:
+The release package uses automatic MSYS2 DLL dependency collection. Install `ntldd` in MSYS2 UCRT64:
 
-- `SudokuSolver.exe`
-- `SDL2.dll`
-- `SDL2_ttf.dll`
-- `libfreetype-6.dll`
-- `libharfbuzz-0.dll`
-- other UCRT64 runtime DLLs required by SDL2_ttf
-- `README_RELEASE.txt`
-- `LICENSE.txt` if available
-- `data/` folder if the local puzzle library should be included
-- Optional `assets/` folder if future versions need runtime assets
-- Optional `fonts/` folder if future versions bundle fonts
+```sh
+pacman -S --needed mingw-w64-ucrt-x86_64-ntldd
+```
 
-## Build First
-
-Build the C++ project first from VS Code with Ctrl+F5, or run the manual command from `README.md`.
-
-The expected executable is:
+The script expects:
 
 ```text
-D:\Soduku\SudokuSolver.exe
+D:\MSYS2\ucrt64\bin\ntldd.exe
+D:\MSYS2\ucrt64\bin\python.exe
 ```
+
+If `ntldd.exe` is missing, `package_windows.bat` stops with the install command above.
 
 ## Automatic Packaging
 
@@ -44,55 +35,93 @@ package_windows.bat
 
 The script will:
 
-1. Create `release/SudokuReasoningRadar_v0.2.0_Windows/`.
-2. Copy `SudokuSolver.exe`.
-3. Try to copy `SDL2.dll`, `SDL2_ttf.dll`, `libfreetype-6.dll`, and the related UCRT64 runtime DLLs from `D:\MSYS2\ucrt64\bin`.
-4. Copy `assets/` or `fonts/` if those folders exist.
-5. Create `README_RELEASE.txt`.
-6. Compress the release folder into `release/SudokuReasoningRadar_Windows.zip`.
-7. Copy the ZIP to:
-   - `website/downloads/SudokuReasoningRadar_Windows.zip`
-   - `docs/downloads/SudokuReasoningRadar_Windows.zip`
+1. Create `release/SudokuReasoningRadar_v0.2.1_Windows/`.
+2. Build first if `SudokuSolver.exe` is missing.
+3. Copy `SudokuSolver.exe`.
+4. Copy optional `assets/`, `data/`, `fonts/`, and `LICENSE`.
+5. Copy `D:\MSYS2\ucrt64\share\tessdata\eng.traineddata` into `tessdata/`.
+6. Run `tools/collect_msys2_dlls.py` with `ntldd.exe`.
+7. Recursively copy only required MSYS2 UCRT64 DLLs into the release folder.
+8. Write `dependency_report.txt` and `dependency_missing.txt`.
+9. Create `release/SudokuReasoningRadar_Windows.zip`.
+10. Copy the ZIP to:
+    - `website/downloads/SudokuReasoningRadar_Windows.zip`
+    - `docs/downloads/SudokuReasoningRadar_Windows.zip`
 
-If the script cannot find the executable or DLLs, it prints a clear warning or error.
-
-## Manual Packaging
-
-If automatic ZIP creation fails:
-
-1. Open `release/SudokuReasoningRadar_v0.2.0_Windows/`.
-2. Confirm the executable and DLLs are inside.
-3. Right-click the folder and choose Send to > Compressed zipped folder.
-4. Rename the ZIP to:
+The ZIP filename intentionally stays stable because GitHub Pages can point to the latest release asset:
 
 ```text
 SudokuReasoningRadar_Windows.zip
 ```
 
-5. Copy it to:
+## Dependency Reports
 
-```text
-website\downloads\
-docs\downloads\
+`dependency_report.txt` includes:
+
+- scan root executable
+- MSYS2 bin path
+- copied DLL count
+- copied DLL list
+- skipped Windows system DLL list
+- missing DLL list
+- scanned executable/DLL list
+- timestamp
+
+`dependency_missing.txt` is empty when no non-system DLLs are missing. If it contains entries, do not publish that ZIP until the missing dependencies are understood.
+
+## Release Self-Test
+
+Run:
+
+```bat
+test_release.bat
 ```
 
-## GitHub Release Option
+The test enters the release folder and sets `PATH` to only:
 
-For the public website, the recommended approach is GitHub Releases. Keep the asset filename stable:
+```text
+release folder
+%SystemRoot%\System32
+%SystemRoot%
+%SystemRoot%\System32\Wbem
+```
+
+It intentionally does not include `D:\MSYS2\ucrt64\bin`, so it better simulates a normal user machine.
+
+## OCR Notes
+
+OCR Import requires:
+
+```text
+tessdata\eng.traineddata
+```
+
+The app first checks for `tessdata/eng.traineddata` next to `SudokuSolver.exe`, then falls back to the development MSYS2 tessdata folder and `TESSDATA_PREFIX`.
+
+If OCR initialization fails, the UI should show:
+
+```text
+Tesseract OCR initialization failed. Make sure tessdata/eng.traineddata exists next to the executable.
+```
+
+## Manual Recovery
+
+If ZIP creation fails but the release folder is valid:
+
+1. Open `release/SudokuReasoningRadar_v0.2.1_Windows/`.
+2. Confirm `SudokuSolver.exe`, DLLs, `tessdata/eng.traineddata`, and dependency reports are present.
+3. Create a ZIP named:
 
 ```text
 SudokuReasoningRadar_Windows.zip
 ```
 
-The website can then use:
+4. Upload it to GitHub Releases or copy it to the local website download folders.
 
-```text
-https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip
-```
+## Do Not
 
-If you do not want to commit the ZIP into the repository, upload it to a GitHub Release instead. Then replace the download link in:
-
-- `website/index.html`
-- `docs/index.html`
-
-Use the release asset URL GitHub gives you.
+- Do not copy the entire `D:\MSYS2\ucrt64\bin` folder.
+- Do not require users to install MSYS2.
+- Do not require users to set `PATH`.
+- Do not delete OCR to make packaging easier.
+- Do not replace the GitHub Pages latest-release download link unless the repository URL changes.

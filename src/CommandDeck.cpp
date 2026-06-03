@@ -3,7 +3,7 @@
 #include <array>
 
 namespace {
-constexpr std::array<CommandAction, 20> kActions = {
+constexpr std::array<CommandAction, 21> kActions = {
     CommandAction::Solve,
     CommandAction::GentleHint,
     CommandAction::TechniqueHint,
@@ -14,6 +14,7 @@ constexpr std::array<CommandAction, 20> kActions = {
     CommandAction::ToggleSolverMode,
     CommandAction::ToggleCandidateDisplay,
     CommandAction::ToggleMistakeMode,
+    CommandAction::OCRImportImage,
     CommandAction::ImportClipboard,
     CommandAction::CopyPuzzle,
     CommandAction::CopySolution,
@@ -83,6 +84,10 @@ CommandItem CommandDeck::describe(CommandAction action, bool enabled) {
     case CommandAction::ToggleMistakeMode:
         item.label = "Mistake Mode";
         item.description = "Cycle Off, RuleCheck, and SolutionCheck.";
+        break;
+    case CommandAction::OCRImportImage:
+        item.label = "OCR Import";
+        item.description = "Import a Sudoku puzzle from a PNG or JPG image.";
         break;
     case CommandAction::ImportClipboard:
         item.label = "Import / Export";

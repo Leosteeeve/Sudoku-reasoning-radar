@@ -2,11 +2,15 @@
 
 #include "Board.h"
 #include "Layout.h"
+#include "OCRReviewState.h"
 #include "OverlayPages.h"
 #include "StepRecorder.h"
 
 #include <SDL.h>
 #include <SDL_ttf.h>
+
+#include <array>
+#include <opencv2/core.hpp>
 
 #include <string>
 #include <vector>
@@ -47,23 +51,39 @@ struct RenderInfo {
     std::string commandDescription;
     std::string overlayTitle;
     std::string overlayInputText;
+    std::string ocrStatusText;
+    std::string ocrValidationText;
+    std::string ocrImagePath;
     std::vector<std::string> overlayLines;
+    std::array<OCRCell, 81> ocrCells{};
     int commandIndex = 0;
     int commandTotal = 1;
     int solvingTimeMs = 0;
     int selectedRow = -1;
     int selectedCol = -1;
+    int ocrGivens = 0;
+    int ocrLowConfidenceCount = 0;
+    int ocrConflictCount = 0;
+    int ocrSelectedRow = -1;
+    int ocrSelectedCol = -1;
+    int ocrPreviewVersion = 0;
     bool paused = false;
     bool playing = false;
     bool commandEnabled = true;
     bool overlayInputActive = false;
+    bool ocrDebug = false;
+    bool ocrCanConfirm = false;
     CandidateDisplayMode candidateMode = CandidateDisplayMode::Focused;
     OverlayPage overlayPage = OverlayPage::None;
     double speedMultiplier = 1.0;
     Uint32 stepAgeMs = 0;
     std::vector<CellRef> hintCells;
     std::vector<CellRef> mistakeCells;
+    const cv::Mat* ocrOriginalPreview = nullptr;
+    const cv::Mat* ocrWarpedGrid = nullptr;
 };
+
+SDL_Texture* createTextureFromMat(SDL_Renderer* renderer, const cv::Mat& mat);
 
 class Renderer {
 public:
@@ -83,6 +103,7 @@ public:
                 const std::vector<UIButton>& buttons);
 
     bool cellFromPoint(int x, int y, int& row, int& col) const;
+    bool ocrCellFromPoint(int x, int y, int& row, int& col) const;
     void layoutButtons(std::vector<UIButton>& buttons,
                        int mouseX = -1,
                        int mouseY = -1,
@@ -101,6 +122,17 @@ private:
                    const std::vector<UIButton>& buttons);
     void drawTimeline(const std::vector<SolveStep>& steps, int currentStep, const RenderInfo& info);
     void drawOverlay(const RenderInfo& info, const std::vector<UIButton>& buttons);
+    void drawOCROverlay(const RenderInfo& info, const std::vector<UIButton>& buttons);
+    void drawOCRImageCard(const std::string& title,
+                          const std::string& emptyText,
+                          const cv::Mat* image,
+                          SDL_Texture*& texture,
+                          int& textureVersion,
+                          int sourceVersion,
+                          const SDL_Rect& rect);
+    void drawOCRReviewBoard(const RenderInfo& info, const SDL_Rect& rect);
+    SDL_Rect ocrModalRect() const;
+    SDL_Rect ocrReviewBoardRect() const;
     void drawCandidates(const Board& board,
                         int row,
                         int col,
@@ -140,4 +172,9 @@ private:
     TTF_Font* fontNumberLarge = nullptr;
     bool fullscreen = false;
     mutable LayoutState layout;
+    mutable SDL_Rect cachedOCRReviewRect{0, 0, 0, 0};
+    SDL_Texture* ocrOriginalTexture = nullptr;
+    SDL_Texture* ocrWarpedTexture = nullptr;
+    int ocrOriginalTextureVersion = -1;
+    int ocrWarpedTextureVersion = -1;
 };

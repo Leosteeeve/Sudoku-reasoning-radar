@@ -3,38 +3,9 @@
     "tasks": [
         {
             "label": "Build Sudoku Solver",
-            "type": "process",
-            "command": "D:\\MSYS2\\ucrt64\\bin\\g++.exe",
-            "args": [
-                "-std=c++17",
-                "-O2",
-                "-Wall",
-                "-Wextra",
-                "main.cpp",
-                "src/Board.cpp",
-                "src/Solver.cpp",
-                "src/DLXSolver.cpp",
-                "src/StepRecorder.cpp",
-                "src/CommandDeck.cpp",
-                "src/OverlayPages.cpp",
-                "src/DifficultyAnalyzer.cpp",
-                "src/PuzzleIO.cpp",
-                "src/HintCoach.cpp",
-                "src/PuzzleGenerator.cpp",
-                "src/PuzzleLibrary.cpp",
-                "src/Layout.cpp",
-                "src/Animation.cpp",
-                "src/Renderer.cpp",
-                "src/App.cpp",
-                "-o",
-                "SudokuSolver.exe",
-                "-ID:/MSYS2/ucrt64/include/SDL2",
-                "-LD:/MSYS2/ucrt64/lib",
-                "-lmingw32",
-                "-lSDL2main",
-                "-lSDL2",
-                "-lSDL2_ttf"
-            ],
+            "type": "shell",
+            "command": ".\\build.bat",
+            "args": [],
             "options": {
                 "cwd": "${workspaceFolder}",
                 "env": {
@@ -48,7 +19,13 @@
                 "kind": "build",
                 "isDefault": true
             },
-            "problemMatcher": "$gcc"
+            "isBackground": false,
+            "problemMatcher": [],
+            "presentation": {
+                "reveal": "always",
+                "panel": "dedicated",
+                "clear": true
+            }
         }
     ]
 }

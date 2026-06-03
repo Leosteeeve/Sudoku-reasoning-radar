@@ -8,6 +8,7 @@ enum class OverlayPage {
     Analytics,
     Library,
     ImportExport,
+    OCRImport,
     Shortcuts,
     Generator,
     About

@@ -1,8 +1,8 @@
 # Sudoku Reasoning Radar
 
-Version: v0.2.0
+Version: v0.2.1
 
-A Windows C++17 visual Sudoku solver built with SDL2 and SDL2_ttf. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, mistake detection, and a local puzzle library.
+A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import, mistake detection, and a local puzzle library.
 
 ## Prompt 2 Features
 
@@ -39,6 +39,24 @@ A Windows C++17 visual Sudoku solver built with SDL2 and SDL2_ttf. It supports e
 - Library drawer lists saved puzzles and keeps the main board focused.
 - Shortcuts drawer replaces the old crowded bottom help text.
 - Bottom status strip now shows one short message instead of another dense progress/control block.
+
+## v0.2.1 OCR Import Assistant
+
+- Import PNG, JPG, or JPEG Sudoku screenshots and straight photos.
+- Pipeline: Image Import -> Detect Grid -> Warp / Normalize -> OCR 81 cells -> Review -> Confirm Import.
+- OpenCV detects the largest Sudoku-like quadrilateral, falls back to Hough-line bounds when possible, and warps the grid to 900 x 900 pixels.
+- Tesseract recognizes non-empty cells with an English digit whitelist and confidence scoring.
+- The OCR review board is editable: low-confidence cells are amber, rule conflicts are red, and empty cells stay muted.
+- Confirm Import never auto-solves. It imports only after the user reviews the result and there are no rule conflicts.
+- OCR Debug can save intermediate images to `data/ocr_debug/`.
+
+Known limitations:
+
+- OCR is best for clear screenshots.
+- Photos with strong perspective, shadows, blur, or handwriting may fail.
+- Low-confidence cells should be reviewed before import.
+- OCR mistakes may make a puzzle invalid or unsolvable.
+- Manual correction is part of the intended workflow.
 
 ## Local Puzzle Library Format
 
@@ -106,6 +124,7 @@ Turbo exact cover constraints:
 - `+`, `=`, or keypad `+`: speed up animation.
 - `-`, `_`, or keypad `-`: slow animation.
 - `F11`, `F`, or `Full`: toggle fullscreen/windowed mode.
+- `O` or `OCR Import`: open the OCR Import Assistant.
 - `G` or `Gen`: generate a new puzzle.
 - `Shift+G`: open the Generator drawer.
 - `F1` or `Hint`: gentle hint.
@@ -125,6 +144,14 @@ Turbo exact cover constraints:
 - `N` or `Puzzle`: cycle built-in puzzles.
 - `Esc`: quit.
 
+OCR Review controls:
+
+- Click a review cell: select it.
+- `1`-`9`: correct the selected OCR digit.
+- `Backspace`, `Delete`, or `0`: clear the selected OCR cell.
+- `Enter`: confirm import when the review board has no rule conflicts.
+- `Esc`: cancel/close the OCR overlay.
+
 ## Built-In Puzzles
 
 - Easy - Singles Practice
@@ -139,23 +166,20 @@ Turbo exact cover constraints:
 Install dependencies in MSYS2 UCRT64 if needed:
 
 ```sh
-pacman -S mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-SDL2_ttf
+pacman -S --needed mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-SDL2_ttf mingw-w64-ucrt-x86_64-opencv mingw-w64-ucrt-x86_64-tesseract-ocr mingw-w64-ucrt-x86_64-tesseract-data-eng mingw-w64-ucrt-x86_64-pkgconf mingw-w64-ucrt-x86_64-ntldd
 ```
 
-Manual build command:
+Build command:
 
-```sh
+```bat
 D:
 cd \Soduku
-if not exist build_tmp mkdir build_tmp
-set PATH=D:\MSYS2\ucrt64\bin;D:\MSYS2\usr\bin;%PATH%
-set TEMP=D:\Soduku\build_tmp
-set TMP=D:\Soduku\build_tmp
-set TMPDIR=D:\Soduku\build_tmp
-D:/MSYS2/ucrt64/bin/g++.exe -std=c++17 -O2 -Wall -Wextra main.cpp src/Board.cpp src/Solver.cpp src/DLXSolver.cpp src/StepRecorder.cpp src/CommandDeck.cpp src/OverlayPages.cpp src/DifficultyAnalyzer.cpp src/PuzzleIO.cpp src/HintCoach.cpp src/PuzzleGenerator.cpp src/PuzzleLibrary.cpp src/Layout.cpp src/Animation.cpp src/Renderer.cpp src/App.cpp -o SudokuSolver.exe -ID:/MSYS2/ucrt64/include/SDL2 -LD:/MSYS2/ucrt64/lib -lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf
+build.bat
 ```
 
-`PATH` is set so `g++` can launch its own UCRT64 helper tools. `TEMP`, `TMP`, and `TMPDIR` are set to `build_tmp` because some MSYS2 tools can fail to create temporary object files when the Windows user profile path contains non-ASCII characters.
+`build.bat` uses `pkg-config` to get OpenCV and Tesseract flags. If OCR dependencies are missing, it prints the pacman command above. It also sets `PATH`, `TEMP`, `TMP`, and `TMPDIR` so MSYS2 can build reliably when the Windows user profile path contains non-ASCII characters.
+
+The first build creates cached object files in `build_tmp/obj`. Later Ctrl+F5 builds are incremental, so unchanged builds should return much faster.
 
 ## Run
 
@@ -183,6 +207,7 @@ This project now includes a static GitHub Pages-ready website.
 - Website preview script: `preview_website.bat`
 - Website sync script: `sync_website_to_docs.bat`
 - Packaging script: `package_windows.bat`
+- Release self-test script: `test_release.bat`
 - Windows release package guide: `PACKAGE_WINDOWS.md`
 - GitHub Pages deployment guide: `DEPLOY_GITHUB_PAGES.md`
 
@@ -210,6 +235,25 @@ The GitHub repository link placeholder is still:
 - GitHub URL: `#github-link-placeholder`
 
 Replace the placeholder after the repository URL is final. Do not commit passwords, tokens, cookies, API keys, or private personal files.
+
+## Windows Release Packaging
+
+`package_windows.bat` creates the Windows ZIP and uses `tools/collect_msys2_dlls.py` plus `ntldd.exe` to recursively copy only the MSYS2 UCRT64 DLLs actually required by `SudokuSolver.exe`, OpenCV, Tesseract, Leptonica, SDL2, and their image codec dependencies.
+
+Install the packaging helper if needed:
+
+```sh
+pacman -S --needed mingw-w64-ucrt-x86_64-ntldd
+```
+
+Package and test:
+
+```bat
+package_windows.bat
+test_release.bat
+```
+
+The release folder includes `dependency_report.txt` and `dependency_missing.txt`. OCR release builds must keep `tessdata/eng.traineddata` next to `SudokuSolver.exe`; the app checks that folder before using the MSYS2 development fallback.
 
 ## Display
 

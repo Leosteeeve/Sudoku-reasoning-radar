@@ -4,6 +4,7 @@
 #include "CommandDeck.h"
 #include "DifficultyAnalyzer.h"
 #include "HintCoach.h"
+#include "OCRImport.h"
 #include "OverlayPages.h"
 #include "PuzzleGenerator.h"
 #include "PuzzleIO.h"
@@ -24,7 +25,7 @@ public:
     void shutdown();
 
 private:
-    static constexpr const char* AppVersion = "v0.2.0";
+    static constexpr const char* AppVersion = "v0.2.1";
 
     enum class Mode {
         Editing,
@@ -79,6 +80,16 @@ private:
     void importPuzzleFromTextBox();
     void pasteClipboardToImportBox();
     void appendImportText(const std::string& text);
+    void openOCRImportOverlay();
+    void chooseOCRImage();
+    void importOCRPathFromClipboard();
+    void detectOCRGrid();
+    void runOCRCells();
+    void autoProcessOCR();
+    void confirmOCRImport();
+    void clearSelectedOCRCell();
+    void toggleOCRDebug();
+    void editSelectedOCRCell(int number);
     void copyCurrentPuzzleString();
     void copyCurrentSolutionString();
     void saveCurrentPuzzleToLibrary();
@@ -115,6 +126,7 @@ private:
     std::string ioText() const;
     std::string libraryText() const;
     std::string focusText() const;
+    std::string ocrText() const;
     std::string shortStatusText() const;
     std::string overlayBodyText() const;
     std::vector<std::string> overlayLines() const;
@@ -134,6 +146,9 @@ private:
     HintCoach hintCoach;
     DifficultyAnalyzer difficultyAnalyzer;
     PuzzleLibrary puzzleLibrary;
+    OCRImport ocrImport;
+    OCRReviewState ocrReview;
+    OCRResult ocrResult;
     Board editBoard;
     Board initialBoard;
     Board replayBoard;
@@ -178,9 +193,13 @@ private:
     std::string mistakeStatus = "Mistake detection off.";
     std::string lastSeed;
     std::string importTextBuffer;
+    std::string ocrImagePath;
+    std::string ocrStatus = "OCR: not run.";
     bool libraryVisible = false;
     bool generating = false;
     bool importTextEditing = false;
+    bool ocrDebug = false;
+    int ocrPreviewVersion = 0;
     OverlayPage currentOverlay = OverlayPage::None;
     Uint32 stepStartedTicks = 0;
 };
