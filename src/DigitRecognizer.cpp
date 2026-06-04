@@ -92,11 +92,139 @@ int countInteriorHoles(const cv::Mat& binaryInk) {
     return std::min(holes, 2);
 }
 
+double averageHoleCenterY(const cv::Mat& binaryInk) {
+    if (binaryInk.empty()) {
+        return 0.5;
+    }
+
+    cv::Mat normalized;
+    cv::threshold(binaryInk, normalized, 0, 255, cv::THRESH_BINARY);
+
+    std::vector<std::vector<cv::Point>> contours;
+    std::vector<cv::Vec4i> hierarchy;
+    cv::findContours(normalized.clone(), contours, hierarchy, cv::RETR_CCOMP, cv::CHAIN_APPROX_SIMPLE);
+
+    double weightedY = 0.0;
+    double weight = 0.0;
+    for (size_t i = 0; i < hierarchy.size(); ++i) {
+        if (hierarchy[i][3] < 0) {
+            continue;
+        }
+
+        const double area = std::abs(cv::contourArea(contours[i]));
+        if (area <= 8.0) {
+            continue;
+        }
+
+        const cv::Moments moments = cv::moments(contours[i]);
+        if (std::abs(moments.m00) < 1e-6) {
+            continue;
+        }
+
+        weightedY += (moments.m01 / moments.m00) * area;
+        weight += area;
+    }
+
+    if (weight <= 0.0) {
+        return 0.5;
+    }
+    return std::clamp(weightedY / weight / static_cast<double>(std::max(1, binaryInk.rows)), 0.0, 1.0);
+}
+
 double averageDistanceToInk(const cv::Mat& distanceField, const cv::Mat& sampleInk) {
     if (distanceField.empty() || sampleInk.empty() || cv::countNonZero(sampleInk) == 0) {
         return 999.0;
     }
     return cv::mean(distanceField, sampleInk)[0];
+}
+
+struct ShapeMetrics {
+    double centerX = 0.5;
+    double centerY = 0.5;
+    double topMass = 0.0;
+    double middleMass = 0.0;
+    double bottomMass = 0.0;
+    double upperRightMass = 0.0;
+    double lowerRightMass = 0.0;
+    double lowerLeftMass = 0.0;
+    double holeCenterY = 0.5;
+};
+
+ShapeMetrics measureShape(const cv::Mat& binaryInk) {
+    ShapeMetrics metrics;
+    if (binaryInk.empty()) {
+        return metrics;
+    }
+
+    cv::Mat normalized;
+    cv::threshold(binaryInk, normalized, 0, 255, cv::THRESH_BINARY);
+
+    const int total = cv::countNonZero(normalized);
+    if (total <= 0) {
+        return metrics;
+    }
+
+    double sumX = 0.0;
+    double sumY = 0.0;
+    int top = 0;
+    int middle = 0;
+    int bottom = 0;
+    int upperRight = 0;
+    int lowerRight = 0;
+    int lowerLeft = 0;
+
+    for (int y = 0; y < normalized.rows; ++y) {
+        const uchar* row = normalized.ptr<uchar>(y);
+        for (int x = 0; x < normalized.cols; ++x) {
+            if (row[x] == 0) {
+                continue;
+            }
+
+            sumX += x;
+            sumY += y;
+            if (y < normalized.rows / 3) {
+                ++top;
+            } else if (y < normalized.rows * 2 / 3) {
+                ++middle;
+            } else {
+                ++bottom;
+            }
+
+            if (x >= normalized.cols / 2 && y < normalized.rows / 2) {
+                ++upperRight;
+            }
+            if (x >= normalized.cols / 2 && y >= normalized.rows / 2) {
+                ++lowerRight;
+            }
+            if (x < normalized.cols / 2 && y >= normalized.rows / 2) {
+                ++lowerLeft;
+            }
+        }
+    }
+
+    const double denom = static_cast<double>(total);
+    metrics.centerX = std::clamp(sumX / denom / static_cast<double>(std::max(1, normalized.cols - 1)), 0.0, 1.0);
+    metrics.centerY = std::clamp(sumY / denom / static_cast<double>(std::max(1, normalized.rows - 1)), 0.0, 1.0);
+    metrics.topMass = static_cast<double>(top) / denom;
+    metrics.middleMass = static_cast<double>(middle) / denom;
+    metrics.bottomMass = static_cast<double>(bottom) / denom;
+    metrics.upperRightMass = static_cast<double>(upperRight) / denom;
+    metrics.lowerRightMass = static_cast<double>(lowerRight) / denom;
+    metrics.lowerLeftMass = static_cast<double>(lowerLeft) / denom;
+    metrics.holeCenterY = averageHoleCenterY(normalized);
+    return metrics;
+}
+
+double shapeDistance(const ShapeMetrics& a, const ShapeMetrics& b) {
+    return std::abs(a.centerX - b.centerX) * 5.0
+        + std::abs(a.centerY - b.centerY) * 7.0
+        + std::abs(a.topMass - b.topMass) * 5.0
+        + std::abs(a.middleMass - b.middleMass) * 3.0
+        + std::abs(a.bottomMass - b.bottomMass) * 5.0
+        + std::abs(a.upperRightMass - b.upperRightMass) * 5.0
+        + std::abs(a.lowerRightMass - b.lowerRightMass) * 8.0
+        + std::abs(a.lowerLeftMass - b.lowerLeftMass) * 5.0
+        + std::abs(a.holeCenterY - b.holeCenterY) * 7.0;
 }
 
 cv::Mat makeTemplateDigit(int digit, int fontFace, int thickness) {
@@ -127,6 +255,7 @@ struct DigitTemplate {
     cv::Mat distanceToInk;
     double ratio = 0.0;
     int holes = 0;
+    ShapeMetrics shape;
 };
 
 std::vector<DigitTemplate> buildDigitTemplates() {
@@ -154,6 +283,7 @@ std::vector<DigitTemplate> buildDigitTemplates() {
                 cv::distanceTransform(inverted, entry.distanceToInk, cv::DIST_L2, 3);
                 entry.ratio = foregroundRatio(entry.ink);
                 entry.holes = countInteriorHoles(entry.ink);
+                entry.shape = measureShape(entry.ink);
                 templates.push_back(entry);
             }
         }
@@ -317,7 +447,7 @@ cv::Mat DigitRecognizer::normalizeCellForDigit(const cv::Mat& cellImage) const {
         return {};
     }
 
-    const cv::Rect inner = insetRect(gray, 0.12);
+    const cv::Rect inner = insetRect(gray, 0.05);
     cv::Mat cropped = gray(inner).clone();
     cv::normalize(cropped, cropped, 0, 255, cv::NORM_MINMAX);
     return cropped;
@@ -583,6 +713,7 @@ DigitRecognizer::Candidate DigitRecognizer::recognizeTemplateFallback(const cv::
 
     const double inputRatio = foregroundRatio(centered);
     const int inputHoles = countInteriorHoles(centered);
+    const ShapeMetrics inputShape = measureShape(centered);
 
     int bestDigit = 0;
     double bestScore = std::numeric_limits<double>::max();
@@ -593,7 +724,20 @@ DigitRecognizer::Candidate DigitRecognizer::recognizeTemplateFallback(const cv::
         const double templateToSample = averageDistanceToInk(inputDistance, tmpl.ink);
         const double ratioPenalty = std::abs(inputRatio - tmpl.ratio) * 120.0;
         const double holePenalty = static_cast<double>(std::abs(inputHoles - tmpl.holes)) * 2.2;
-        const double score = sampleToTemplate * 0.58 + templateToSample * 0.42 + ratioPenalty + holePenalty;
+        const double shapePenalty = shapeDistance(inputShape, tmpl.shape);
+        double score = sampleToTemplate * 0.54 + templateToSample * 0.38 + ratioPenalty + holePenalty + shapePenalty;
+
+        const bool upperLoop = inputHoles >= 1 && inputShape.holeCenterY < 0.47;
+        const bool rightTail = inputShape.lowerRightMass >= inputShape.lowerLeftMass * 0.82;
+        if (upperLoop && rightTail && tmpl.digit == 9) {
+            score -= 1.15;
+        }
+        if (upperLoop && tmpl.digit == 6) {
+            score += 1.05;
+        }
+        if (inputHoles <= 1 && tmpl.digit == 8) {
+            score += 1.25;
+        }
 
         if (score < bestScore) {
             secondScore = bestScore;
