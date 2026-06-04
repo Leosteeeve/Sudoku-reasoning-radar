@@ -27,8 +27,13 @@ private:
     };
 
     std::vector<cv::Mat> makeVariants(const cv::Mat& cellImage) const;
+    cv::Mat normalizeCellForDigit(const cv::Mat& cellImage) const;
+    cv::Mat isolateDigitInk(const cv::Mat& gray) const;
+    cv::Mat centerInk(const cv::Mat& ink, int outputSize, int borderValue) const;
     Candidate recognizeVariant(const cv::Mat& image) const;
+    Candidate recognizeTemplateFallback(const cv::Mat& cellImage) const;
     bool isEmptyCell(const cv::Mat& cellImage, float& confidence) const;
+    static Candidate mergeCandidates(const std::vector<Candidate>& candidates);
     static std::string findTessdataPath();
     static std::string trimOCRText(const char* raw);
 

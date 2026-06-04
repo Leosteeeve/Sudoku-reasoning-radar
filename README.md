@@ -114,19 +114,19 @@ http://localhost:8000/
 
 Do not double-click `docs/play/index.html`, because browser `file://` loading usually blocks WebAssembly side files.
 
-VS Code Web preview:
+VS Code Ctrl+F5 is reserved for the Windows desktop app. For the Web preview, use the script or VS Code task instead:
 
-1. Open the Run and Debug dropdown.
-2. Select `Run Web Preview (Edge)`.
-3. Press Ctrl+F5.
+```bat
+scripts\serve_web.bat
+```
 
-That configuration runs `Build Web Preview`, starts the no-cache local server, and opens:
+Then open:
 
 ```text
 http://localhost:8000/?fresh=web-parity-hotfix
 ```
 
-The default `Run Sudoku Solver` configuration is still the Windows desktop app. Pressing Ctrl+F5 while that configuration is selected will not refresh an already-open browser page.
+The Web preview stays outside `launch.json` so it cannot accidentally replace the desktop Ctrl+F5 workflow.
 
 ## Local Puzzle Library Format
 
