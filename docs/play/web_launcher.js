@@ -8,7 +8,7 @@
     const runtimeLog = document.getElementById("runtimeLog");
     const fullscreenButton = document.getElementById("fullscreenButton");
 
-    const buildStamp = "20260605-preview2-polish";
+    const buildStamp = "20260605-v030-browser-ocr-process";
     let dependencyTotal = 0;
     let runtimeReady = false;
     let lastWidth = 0;

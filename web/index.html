@@ -3,8 +3,8 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="Play the WebAssembly preview of Sudoku Reasoning Radar in the browser.">
-    <title>Sudoku Reasoning Radar Web Preview</title>
+    <meta name="description" content="Play Sudoku Reasoning Radar v0.3.0 Browser Edition in the browser.">
+    <title>Sudoku Reasoning Radar Browser Edition</title>
     <link rel="stylesheet" href="web_style.css">
 </head>
 <body>
@@ -14,8 +14,8 @@
                 <span class="brand-grid" aria-hidden="true"></span>
                 <span>Sudoku Reasoning Radar</span>
             </a>
-            <span class="version-pill">Web Preview v0.3.0-preview.2</span>
-            <nav class="web-links" aria-label="Preview navigation">
+            <span class="version-pill">Browser Edition v0.3.0</span>
+            <nav class="web-links" aria-label="Browser Edition navigation">
                 <a href="../">Website</a>
                 <a href="https://github.com/Leosteeeve/Sudoku-reasoning-radar/releases/latest/download/SudokuReasoningRadar_Windows.zip">Windows ZIP</a>
                 <button id="fullscreenButton" type="button">Fullscreen</button>
@@ -40,6 +40,8 @@
         </main>
     </div>
 
-    <script src="web_launcher.js?v=20260605-preview2-polish"></script>
+    <script src="ocr/browser_ocr_loader.js?v=20260605-v030-browser-ocr-process"></script>
+    <script src="ocr/browser_ocr_bridge.js?v=20260605-v030-browser-ocr-process"></script>
+    <script src="web_launcher.js?v=20260605-v030-browser-ocr-process"></script>
 </body>
 </html>

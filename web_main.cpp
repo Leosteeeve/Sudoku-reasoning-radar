@@ -27,7 +27,7 @@ namespace {
 constexpr int WindowWidth = 1280;
 constexpr int WindowHeight = 860;
 constexpr int Margin = 28;
-constexpr const char* WebVersionLabel = "Web Preview v0.3.0-preview.2";
+constexpr const char* WebVersionLabel = "Browser Edition v0.3.0";
 
 SDL_Color bg{5, 8, 9, 255};
 SDL_Color panel{12, 22, 23, 238};
@@ -108,7 +108,7 @@ struct AppState {
     std::vector<std::string> library;
     std::vector<Button> buttons;
     std::string puzzleName = "Custom Empty";
-    std::string status = "Web Preview ready. Enter digits or generate a puzzle.";
+    std::string status = "Browser Edition ready. Enter digits or generate a puzzle.";
     std::string importText;
     std::string overlayTitle;
     std::string overlayBody;
@@ -884,12 +884,12 @@ void saveOrLoadLibrary(AppState& app) {
             app.puzzleName = "Browser Library";
             clearTrace(app);
             app.status = "Loaded browser library puzzle.";
-            showOverlay(app, OverlayPage::Library, "Loaded the last browser library puzzle. Browser persistence is limited in this preview.");
+            showOverlay(app, OverlayPage::Library, "Loaded the last browser library puzzle. Browser persistence stores the latest puzzle in localStorage.");
             return;
         }
     }
     saveBrowserLibrary(boardString(app.board));
-    showOverlay(app, OverlayPage::Library, "Saved current puzzle to browser localStorage. Browser library persistence is limited in this preview.");
+    showOverlay(app, OverlayPage::Library, "Saved current puzzle to browser localStorage. Browser library stores the latest puzzle.");
 }
 
 void executeCommand(AppState& app, CommandAction action) {
@@ -933,8 +933,26 @@ void executeCommand(AppState& app, CommandAction action) {
         cycleMistakeMode(app);
         break;
     case CommandAction::OCRImportImage:
-        showOverlay(app, OverlayPage::OCRImport, "OCR Import is available in the Windows version. Browser OCR support is planned for a later release.");
+    {
+        int opened = 0;
+#ifdef __EMSCRIPTEN__
+        opened = EM_ASM_INT({
+            if (window.SRRBrowserOCR && typeof window.SRRBrowserOCR.openImportPanel === "function") {
+                window.SRRBrowserOCR.openImportPanel();
+                return 1;
+            }
+            return 0;
+        });
+#endif
+        if (opened) {
+            app.status = "Browser image import opened. Use Windows ZIP for strongest automatic OCR.";
+        } else {
+            showOverlay(app,
+                        OverlayPage::OCRImport,
+                        "Browser OCR uses a lightweight image-assisted manual import panel. Windows ZIP remains recommended for automatic OCR.");
+        }
         break;
+    }
     case CommandAction::ImportClipboard:
         showOverlay(app, OverlayPage::ImportExport);
         break;
@@ -1594,7 +1612,7 @@ std::vector<std::string> overlayLines(const AppState& app) {
         lines.push_back("Backtracks: " + std::to_string(app.report.stats.backtracks));
         break;
     case OverlayPage::Library:
-        lines.push_back(app.overlayBody.empty() ? "Browser library persistence is limited in this preview." : app.overlayBody);
+        lines.push_back(app.overlayBody.empty() ? "Browser library persistence stores the latest puzzle in localStorage." : app.overlayBody);
         lines.push_back("This Web build stores one puzzle in browser localStorage.");
         lines.push_back("Use Save To Library or Open Library from the Command Deck.");
         break;
@@ -1605,9 +1623,10 @@ std::vector<std::string> overlayLines(const AppState& app) {
         break;
     case OverlayPage::OCRImport:
         lines.push_back(app.overlayBody.empty()
-                            ? "OCR Import is available in the Windows version. Browser OCR support is planned for a later release."
+                            ? "Browser OCR is experimental. Use Image-Assisted Manual Import for screenshots, or the Windows ZIP for automatic OCR."
                             : app.overlayBody);
-        lines.push_back("The Web build intentionally excludes OpenCV and Tesseract.");
+        lines.push_back("The browser shell can open an image preview beside an 81-character puzzle string box.");
+        lines.push_back("Automatic browser OCR hooks are documented, but no large OCR library is loaded at startup.");
         break;
     case OverlayPage::Shortcuts:
         lines.push_back("Click a cell, then press 1-9 to enter a digit.");
@@ -1625,7 +1644,8 @@ std::vector<std::string> overlayLines(const AppState& app) {
         break;
     case OverlayPage::About:
         lines.push_back(std::string("Sudoku Reasoning Radar ") + WebVersionLabel + ".");
-        lines.push_back("This preview shares the solver core and Command Deck model, with OCR disabled for browser builds.");
+        lines.push_back("This Browser Edition shares the solver core and Command Deck model with the Windows app.");
+        lines.push_back("Browser image import uses a lightweight assisted path; Windows desktop keeps the full OCR assistant.");
         break;
     case OverlayPage::None:
         break;
@@ -1779,6 +1799,34 @@ void shutdownApp(AppState& app) {
 }
 
 #ifdef __EMSCRIPTEN__
+extern "C" EMSCRIPTEN_KEEPALIVE void SRR_ImportPuzzleString(const char* puzzleString) {
+    if (!gApp || !puzzleString) {
+        return;
+    }
+
+    Board imported;
+    std::string status;
+    if (!parsePuzzleString(puzzleString, imported, &status)) {
+        gApp->status = "Browser import failed: " + status;
+        webLog(gApp->status);
+        return;
+    }
+
+    gApp->board = imported;
+    gApp->board.initializeCandidates();
+    gApp->initialBoard = gApp->board;
+    gApp->replayBoard = gApp->board;
+    gApp->finalBoard.clear();
+    gApp->puzzleName = "Browser Image Import";
+    gApp->lastResult = SolveResult::NoSolution;
+    gApp->report = DifficultyReport{};
+    clearTrace(*gApp);
+    gApp->importText = boardString(gApp->board);
+    gApp->status = "Imported browser puzzle string. Review givens before solving.";
+    closeOverlay(*gApp);
+    webLog(gApp->status);
+}
+
 extern "C" EMSCRIPTEN_KEEPALIVE void SRR_OnCanvasResize(int width, int height) {
     if (gApp) {
         applyResize(*gApp, width, height);

@@ -273,6 +273,281 @@ canvas {
     display: none;
 }
 
+.srr-ocr-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 8;
+    display: grid;
+    place-items: center;
+    padding: clamp(14px, 3vw, 34px);
+    background: rgba(0, 0, 0, 0.62);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 180ms ease;
+}
+
+.srr-ocr-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.srr-ocr-card {
+    width: min(1120px, 100%);
+    max-height: min(820px, calc(100vh - 38px));
+    overflow: auto;
+    border: 1px solid rgba(57, 223, 255, 0.5);
+    background:
+        linear-gradient(135deg, rgba(83, 239, 181, 0.08), transparent 42%),
+        rgba(5, 10, 11, 0.97);
+    box-shadow: 0 30px 90px rgba(0, 0, 0, 0.58), 0 0 42px rgba(57, 223, 255, 0.08);
+}
+
+.srr-ocr-header,
+.srr-ocr-body,
+.srr-ocr-actions,
+.srr-ocr-row {
+    display: flex;
+}
+
+.srr-ocr-header {
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 18px;
+    padding: 22px 24px 16px;
+    border-bottom: 1px solid rgba(215, 242, 236, 0.14);
+}
+
+.srr-ocr-header p {
+    margin: 0 0 5px;
+    color: var(--green);
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+}
+
+.srr-ocr-header h2 {
+    margin: 0;
+    font-size: clamp(1.35rem, 2.2vw, 2rem);
+}
+
+.srr-ocr-close,
+.srr-ocr-file span,
+.srr-ocr-process,
+.srr-ocr-actions button,
+.srr-ocr-row button {
+    border: 1px solid rgba(57, 223, 255, 0.42);
+    background: rgba(14, 23, 25, 0.88);
+    color: var(--text);
+}
+
+.srr-ocr-close {
+    min-width: 84px;
+    min-height: 42px;
+}
+
+.srr-ocr-status {
+    margin: 16px 24px 0;
+    border: 1px solid rgba(83, 239, 181, 0.24);
+    padding: 10px 12px;
+    color: var(--muted);
+    background: rgba(9, 18, 19, 0.84);
+}
+
+.srr-ocr-status.error {
+    border-color: rgba(255, 111, 145, 0.48);
+    color: #ffc7d2;
+}
+
+.srr-ocr-status.success {
+    border-color: rgba(83, 239, 181, 0.52);
+    color: #b9ffe5;
+}
+
+.srr-ocr-body {
+    gap: 22px;
+    padding: 22px 24px 24px;
+}
+
+.srr-ocr-image-pane,
+.srr-ocr-input-pane {
+    min-width: 0;
+}
+
+.srr-ocr-image-pane {
+    flex: 1 1 52%;
+}
+
+.srr-ocr-input-pane {
+    flex: 1 1 48%;
+}
+
+.srr-ocr-toolbar {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
+    margin-bottom: 12px;
+}
+
+.srr-ocr-file input {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+}
+
+.srr-ocr-file span {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 44px;
+    padding: 0 16px;
+    cursor: pointer;
+}
+
+.srr-ocr-process {
+    min-height: 44px;
+    padding: 0 16px;
+    border-color: rgba(83, 239, 181, 0.52);
+    color: #061111;
+    background: linear-gradient(90deg, var(--green), var(--cyan));
+    font-weight: 800;
+}
+
+.srr-ocr-process:disabled {
+    cursor: progress;
+    opacity: 0.72;
+}
+
+.srr-ocr-preview {
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 360px;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    border: 1px solid rgba(215, 242, 236, 0.18);
+    color: var(--muted);
+    background:
+        linear-gradient(rgba(83, 239, 181, 0.1) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(57, 223, 255, 0.1) 1px, transparent 1px),
+        rgba(4, 8, 8, 0.82);
+    background-size: 34px 34px;
+}
+
+.srr-ocr-preview img {
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    background: #000;
+}
+
+.srr-ocr-grid-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+        linear-gradient(90deg, transparent calc(11.111% - 1px), rgba(57, 223, 255, 0.42) calc(11.111% - 1px) calc(11.111% + 1px), transparent calc(11.111% + 1px)),
+        linear-gradient(0deg, transparent calc(11.111% - 1px), rgba(57, 223, 255, 0.42) calc(11.111% - 1px) calc(11.111% + 1px), transparent calc(11.111% + 1px));
+    background-size: 11.111% 11.111%;
+    box-shadow: inset 0 0 0 2px rgba(238, 248, 244, 0.64);
+}
+
+.srr-ocr-cell-badges {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: repeat(9, 1fr);
+    grid-template-rows: repeat(9, 1fr);
+    pointer-events: none;
+}
+
+.srr-ocr-cell-badges span {
+    align-self: start;
+    justify-self: end;
+    min-width: 22px;
+    margin: 5px;
+    padding: 2px 5px;
+    border: 1px solid rgba(57, 223, 255, 0.58);
+    color: #061111;
+    background: rgba(83, 239, 181, 0.9);
+    font: 800 0.9rem/1 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    text-align: center;
+    box-shadow: 0 0 14px rgba(57, 223, 255, 0.35);
+}
+
+.srr-ocr-cell-badges span.low {
+    border-color: rgba(255, 111, 145, 0.72);
+    background: rgba(255, 111, 145, 0.92);
+}
+
+.srr-ocr-help {
+    margin-bottom: 12px;
+}
+
+.srr-ocr-help strong,
+.srr-ocr-help span,
+.srr-ocr-note {
+    display: block;
+}
+
+.srr-ocr-help strong {
+    margin-bottom: 5px;
+}
+
+.srr-ocr-help span,
+.srr-ocr-note {
+    color: var(--muted);
+    line-height: 1.55;
+}
+
+.srr-ocr-input-pane textarea {
+    width: 100%;
+    min-height: 214px;
+    resize: vertical;
+    border: 1px solid rgba(215, 242, 236, 0.18);
+    padding: 14px;
+    color: var(--text);
+    background: rgba(4, 8, 8, 0.82);
+    font: 1rem/1.6 ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+.srr-ocr-row {
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 10px 0 16px;
+    color: var(--muted);
+}
+
+.srr-ocr-row span.ready {
+    color: var(--green);
+}
+
+.srr-ocr-row button,
+.srr-ocr-actions button {
+    min-height: 40px;
+    padding: 0 14px;
+}
+
+.srr-ocr-actions {
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.srr-ocr-actions button:first-child {
+    color: #061111;
+    background: linear-gradient(90deg, var(--cyan), var(--green));
+    border-color: transparent;
+    font-weight: 800;
+}
+
+.srr-ocr-note {
+    margin: 18px 0 0;
+    font-size: 0.92rem;
+}
+
 @keyframes spinGrid {
     to {
         transform: rotate(360deg);
@@ -298,5 +573,13 @@ canvas {
         justify-content: flex-start;
         overflow-x: auto;
         padding-bottom: 2px;
+    }
+
+    .srr-ocr-body {
+        flex-direction: column;
+    }
+
+    .srr-ocr-preview {
+        min-height: 260px;
     }
 }

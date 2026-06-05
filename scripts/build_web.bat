@@ -4,9 +4,12 @@ setlocal EnableExtensions
 cd /d "%~dp0\.."
 
 if not exist "docs\play" mkdir "docs\play"
+if not exist "docs\play\ocr" mkdir "docs\play\ocr"
 copy /Y "web\index.html" "docs\play\index.html" >nul
 copy /Y "web\web_style.css" "docs\play\web_style.css" >nul
 copy /Y "web\web_launcher.js" "docs\play\web_launcher.js" >nul
+if exist "web\ocr\*.js" copy /Y "web\ocr\*.js" "docs\play\ocr\" >nul
+if exist "web\ocr\*.md" copy /Y "web\ocr\*.md" "docs\play\ocr\" >nul
 
 where em++ >nul 2>nul
 if errorlevel 1 (
@@ -27,7 +30,7 @@ set OUT_WASM=web_build\SudokuReasoningRadar.wasm
 
 del /Q "%OUT_JS%" "%OUT_WASM%" "web_build\SudokuReasoningRadar.data" 2>nul
 
-echo Building Sudoku Reasoning Radar WebAssembly preview...
+echo Building Sudoku Reasoning Radar Browser Edition v0.3.0...
 
 call em++ ^
   -std=c++17 ^
@@ -54,7 +57,7 @@ call em++ ^
   -sENVIRONMENT=web ^
   -sASSERTIONS=1 ^
   -sEXPORTED_RUNTIME_METHODS=ccall ^
-  -sEXPORTED_FUNCTIONS=_main,_SRR_OnCanvasResize ^
+  -sEXPORTED_FUNCTIONS=_main,_SRR_OnCanvasResize,_SRR_ImportPuzzleString ^
   -o "%OUT_JS%"
 
 set BUILD_EXIT=%ERRORLEVEL%

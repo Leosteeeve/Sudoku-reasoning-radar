@@ -28,7 +28,7 @@
             }
         },
         {
-            "label": "Build Web Preview",
+            "label": "Build Browser Edition",
             "type": "shell",
             "command": "cmd",
             "args": [
@@ -48,7 +48,7 @@
             }
         },
         {
-            "label": "Serve Web Preview",
+            "label": "Serve Browser Edition",
             "type": "shell",
             "command": "cmd",
             "args": [
@@ -58,11 +58,11 @@
             "options": {
                 "cwd": "${workspaceFolder}"
             },
-            "dependsOn": "Build Web Preview",
+            "dependsOn": "Build Browser Edition",
             "dependsOrder": "sequence",
             "isBackground": true,
             "problemMatcher": {
-                "owner": "web-preview",
+                "owner": "browser-edition",
                 "pattern": {
                     "regexp": "^(.*)$",
                     "message": 1

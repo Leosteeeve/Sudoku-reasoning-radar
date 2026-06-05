@@ -1,8 +1,8 @@
 # Sudoku Reasoning Radar
 
-Version: v0.3.0-preview.2 WebAssembly Preview + v0.2.1 Windows desktop
+Version: v0.3.0 Browser Edition + v0.2.1 Windows desktop OCR baseline
 
-A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract, plus a v0.3.0-preview.2 WebAssembly browser preview built with Emscripten and SDL2. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import on Windows, mistake detection, and local puzzle storage.
+A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract, plus a v0.3.0 Browser Edition built with Emscripten and SDL2. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import on Windows, browser image-assisted import, mistake detection, and local puzzle storage.
 
 ## Prompt 2 Features
 
@@ -58,17 +58,18 @@ Known limitations:
 - OCR mistakes may make a puzzle invalid or unsolvable.
 - Manual correction is part of the intended workflow.
 
-## v0.3.0-preview.2 WebAssembly Browser Preview
+## v0.3.0 Browser Edition
 
 - Browser-playable Sudoku board compiled from `web_main.cpp` with Emscripten.
 - Uses the existing solver core: Board, Solver, DLXSolver, StepRecorder, PuzzleGenerator, HintCoach, and DifficultyAnalyzer.
 - Includes editable cells, candidate display, solver mode switching, puzzle generation, hint coach, difficulty analysis, mistake checking, import/export string overlay, localStorage puzzle save/load, settings/analytics/library/shortcuts overlays, and animated trace scrubbing.
-- Preview.2 is a visual polish release: lower-alpha Web highlights, digits always rendered above overlays, placement pulse animation, candidate-removal strike-through fade, cleaner Focus Panel hierarchy, refined Command Deck spacing, and responsive layout polish.
+- v0.3.0 is the first official Browser Edition: lower-alpha Web highlights, digits always rendered above overlays, placement pulse animation, candidate-removal strike-through fade, cleaner Focus Panel hierarchy, refined Command Deck spacing, responsive layout polish, fullscreen support, and browser image-assisted import with a lightweight Process Image recognizer.
 - Uses an Emscripten main loop through `emscripten_set_main_loop_arg`.
 - GitHub Pages output lives in `docs/play/`.
 - The playable page is a full-viewport app shell: a compact top bar plus an SDL canvas that fills the remaining browser space.
 - Web canvas resize is synchronized across CSS size, canvas backing store, SDL window size, renderer viewport, layout, and input hit testing.
-- OpenCV and Tesseract are not linked in WebAssembly. OCR Import is currently available in the Windows version; browser OCR support is planned for a later release.
+- Browser OCR does not bundle OpenCV.js or Tesseract.js at startup. The OCR action opens an Image-Assisted Manual Import panel with a no-dependency `Process Image` recognizer, and JavaScript sends reviewed 81-character strings into C++ through `SRR_ImportPuzzleString`.
+- Windows desktop remains the recommended automatic OCR path because it keeps the full OpenCV/Tesseract assistant, confidence review, and debug output.
 
 Web build scripts:
 
@@ -115,7 +116,7 @@ http://localhost:8000/
 
 Do not double-click `docs/play/index.html`, because browser `file://` loading usually blocks WebAssembly side files.
 
-VS Code Ctrl+F5 is reserved for the Windows desktop app. For the Web preview, use the script or VS Code task instead:
+VS Code Ctrl+F5 is reserved for the Windows desktop app. For the Browser Edition, use the script or VS Code task instead:
 
 ```bat
 scripts\serve_web.bat
@@ -127,7 +128,7 @@ Then open:
 http://localhost:8000/?fresh=web-parity-hotfix
 ```
 
-The Web preview stays outside `launch.json` so it cannot accidentally replace the desktop Ctrl+F5 workflow.
+The Browser Edition stays outside `launch.json` so it cannot accidentally replace the desktop Ctrl+F5 workflow.
 
 ## Local Puzzle Library Format
 
@@ -347,9 +348,9 @@ The main interface now uses progressive disclosure. The board and current reason
 - Turbo mode focuses on speed and uniqueness detection, not detailed human-style animation.
 - Visual animations are SDL2-based and intentionally lightweight.
 - Human Logic Mode can stop on puzzles that require techniques beyond the implemented set.
-- The v0.3.0-preview.2 Web Preview disables OCR and uses browser `localStorage` for a lightweight puzzle library.
+- The v0.3.0 Browser Edition uses image-assisted manual import for browser screenshots and `localStorage` for a lightweight puzzle library.
 - The browser build prioritizes logical-pixel correctness over high-DPI supersampling, so canvas rendering and mouse hit testing stay aligned across resize and fullscreen.
 
 ## Roadmap
 
-- v0.3.x: Browser OCR exploration, Daily Challenge, advanced generator tuning, richer Hint Coach explanations, puzzle library filters, and deeper difficulty history.
+- v0.3.x: optional automatic browser OCR exploration, Daily Challenge, advanced generator tuning, richer Hint Coach explanations, puzzle library filters, and deeper difficulty history.
