@@ -1,6 +1,6 @@
 # Sudoku Reasoning Radar Web Preview
 
-Version: v0.3.0 WebAssembly Preview
+Version: v0.3.0-preview.2 WebAssembly Preview
 
 This folder contains the browser shell for the WebAssembly build. The web app compiles the solver core and a browser-specific SDL2 canvas front end from `web_main.cpp`.
 
@@ -8,6 +8,7 @@ This folder contains the browser shell for the WebAssembly build. The web app co
 
 - 9x9 editable Sudoku board.
 - Visual candidates, selected-cell focus, scan-style highlights, candidate-removal marks, and animated solve trace playback.
+- v0.3.0-preview.2 refines highlight readability, placement pulses, candidate-removal strike-through animation, Focus Panel hierarchy, Command Deck spacing, and responsive layout polish.
 - Solver modes: Human Logic, Smart Solver, and Turbo Exact Cover.
 - Puzzle generation with Easy / Medium / Hard / Expert targets.
 - Hint Coach, difficulty analyzer, mistake checking, import/export, and a lightweight browser library.
@@ -107,6 +108,6 @@ scripts\clean_web.bat
 
 - Browser OCR is disabled in this preview.
 - The browser library stores one puzzle in `localStorage`; the Windows build keeps the richer text-file library.
-- Text rendering uses a lightweight bitmap font in the Web preview to avoid bundling font assets.
+- Text rendering still uses a lightweight bitmap font in the Web preview, with reduced oversized labels and softer hierarchy in preview.2. SDL_ttf font bundling remains a future Web polish item.
 - The Web preview uses the same solver core and Command Deck model as desktop, but still has a browser-specific SDL canvas renderer.
 - The Web UI is a preview front end and intentionally keeps Windows release packaging, DLL collection, and OCR untouched.

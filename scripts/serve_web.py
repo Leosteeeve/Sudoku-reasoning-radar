@@ -11,6 +11,9 @@ class NoCacheHandler(SimpleHTTPRequestHandler):
         self.send_header("Expires", "0")
         super().end_headers()
 
+    def log_message(self, format, *args):
+        return
+
 
 def main():
     parser = argparse.ArgumentParser(description="Serve docs/play with no browser cache.")
@@ -18,9 +21,10 @@ def main():
     parser.add_argument("--directory", default=os.path.join("docs", "play"))
     args = parser.parse_args()
 
-    handler = partial(NoCacheHandler, directory=args.directory)
+    directory = os.path.abspath(args.directory)
+    handler = partial(NoCacheHandler, directory=directory)
     server = ThreadingHTTPServer(("localhost", args.port), handler)
-    print(f"Serving {args.directory} at http://localhost:{args.port}/")
+    print(f"Serving {directory} at http://localhost:{args.port}/")
     print("Cache disabled. Press Ctrl+C to stop.")
     try:
         server.serve_forever()

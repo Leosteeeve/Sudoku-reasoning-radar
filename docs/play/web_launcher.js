@@ -8,7 +8,7 @@
     const runtimeLog = document.getElementById("runtimeLog");
     const fullscreenButton = document.getElementById("fullscreenButton");
 
-    const buildStamp = "20260604-web-parity-hotfix";
+    const buildStamp = "20260605-preview2-polish";
     let dependencyTotal = 0;
     let runtimeReady = false;
     let lastWidth = 0;

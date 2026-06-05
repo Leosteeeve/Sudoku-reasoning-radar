@@ -26,12 +26,11 @@
 namespace {
 constexpr int WindowWidth = 1280;
 constexpr int WindowHeight = 860;
-constexpr int PanelWidth = 430;
 constexpr int Margin = 28;
+constexpr const char* WebVersionLabel = "Web Preview v0.3.0-preview.2";
 
 SDL_Color bg{5, 8, 9, 255};
 SDL_Color panel{12, 22, 23, 238};
-SDL_Color line{140, 170, 164, 135};
 SDL_Color text{235, 248, 244, 255};
 SDL_Color muted{150, 170, 166, 255};
 SDL_Color cyan{57, 223, 255, 255};
@@ -39,6 +38,28 @@ SDL_Color green{83, 239, 181, 255};
 SDL_Color amber{255, 209, 102, 255};
 SDL_Color red{255, 94, 128, 255};
 SDL_Color purple{188, 132, 255, 255};
+
+SDL_Color withAlpha(SDL_Color color, Uint8 alpha) {
+    color.a = alpha;
+    return color;
+}
+
+double clamp01(double value) {
+    return std::max(0.0, std::min(1.0, value));
+}
+
+double easeOutCubic(double t) {
+    t = clamp01(t);
+    const double inv = 1.0 - t;
+    return 1.0 - inv * inv * inv;
+}
+
+double easeOutBack(double t) {
+    t = clamp01(t);
+    constexpr double c1 = 1.70158;
+    constexpr double c3 = c1 + 1.0;
+    return 1.0 + c3 * std::pow(t - 1.0, 3.0) + c1 * std::pow(t - 1.0, 2.0);
+}
 
 enum class CandidateMode {
     Off,
@@ -471,26 +492,28 @@ void drawLabelValue(SDL_Renderer* renderer,
 
 LayoutState layoutFor(const AppState& app) {
     LayoutState layout;
-    const int margin = clampInt(app.width / 48, 16, Margin);
-    const int headerH = 52;
-    const int gap = clampInt(app.width / 80, 14, 28);
+    const int margin = clampInt(app.width / 56, 16, Margin);
+    const int headerH = app.height < 620 ? 40 : 56;
+    const int gap = clampInt(app.width / 64, 24, 40);
     const int contentX = margin;
     const int contentY = margin + headerH;
     const int contentW = std::max(1, app.width - margin * 2);
     const int contentH = std::max(1, app.height - margin * 2 - headerH);
-    layout.compact = app.width < 980 || contentW < 760;
+    layout.compact = app.width < 1040 || contentW < 820;
 
     if (!layout.compact) {
-        const int panelW = clampInt(app.width / 4, 310, PanelWidth);
-        const int boardSize = std::max(240, std::min(contentH, contentW - panelW - gap));
+        const int panelW = clampInt(app.width / 4, 360, 460);
+        const int boardLimit = std::max(240, contentW - panelW - gap);
+        const int boardSize = std::max(260, std::min(contentH, boardLimit));
         const int totalW = boardSize + gap + panelW;
         const int startX = std::max(contentX, (app.width - totalW) / 2);
-        layout.board = SDL_Rect{startX, contentY, boardSize, boardSize};
-        layout.panel = SDL_Rect{startX + boardSize + gap, contentY, panelW, boardSize};
+        const int startY = contentY + std::max(0, (contentH - boardSize) / 2);
+        layout.board = SDL_Rect{startX, startY, boardSize, boardSize};
+        layout.panel = SDL_Rect{startX + boardSize + gap, startY, panelW, boardSize};
         return layout;
     }
 
-    const int panelH = clampInt(contentH / 2, 380, 430);
+    const int panelH = clampInt(contentH / 2, 340, 440);
     const int boardSize = std::max(220, std::min(contentW, contentH - panelH - gap));
     const int startX = std::max(contentX, (app.width - boardSize) / 2);
     layout.board = SDL_Rect{startX, contentY, boardSize, boardSize};
@@ -1099,6 +1122,12 @@ void handleEvent(AppState& app, const SDL_Event& event) {
         } else if (key == SDLK_p) {
             app.paused = !app.paused;
             app.playing = !app.steps.empty();
+        } else if (key == SDLK_EQUALS || key == SDLK_PLUS || key == SDLK_KP_PLUS) {
+            app.speedMultiplier = std::min(4.0, app.speedMultiplier * 1.25);
+            app.status = "Animation speed " + std::to_string(static_cast<int>(app.speedMultiplier * 100.0)) + "%.";
+        } else if (key == SDLK_MINUS || key == SDLK_KP_MINUS) {
+            app.speedMultiplier = std::max(0.25, app.speedMultiplier / 1.25);
+            app.status = "Animation speed " + std::to_string(static_cast<int>(app.speedMultiplier * 100.0)) + "%.";
         }
     }
 }
@@ -1146,6 +1175,41 @@ bool sameUnit(int r, int c, int sr, int sc) {
     return r == sr || c == sc || Board::boxId(r, c) == Board::boxId(sr, sc);
 }
 
+bool isPlacementStep(StepType type) {
+    return type == StepType::PlaceNumber
+        || type == StepType::NakedSingle
+        || type == StepType::HiddenSingle
+        || type == StepType::Guess
+        || type == StepType::Solved
+        || type == StepType::TurboSolved;
+}
+
+bool isRemovalStep(StepType type) {
+    return type == StepType::RemoveCandidate
+        || type == StepType::CandidateRemovedByLogic
+        || type == StepType::LockedCandidate
+        || type == StepType::BoxLineReduction
+        || type == StepType::NakedPair
+        || type == StepType::HiddenPair
+        || type == StepType::XWing;
+}
+
+double stepAgeMs(const AppState& app) {
+    if (app.stepStartedTicks == 0) {
+        return 0.0;
+    }
+    const Uint32 now = SDL_GetTicks();
+    return static_cast<double>(now - app.stepStartedTicks);
+}
+
+double stepProgress(const AppState& app, double durationMs) {
+    return clamp01(stepAgeMs(app) / std::max(1.0, durationMs));
+}
+
+SDL_Rect insetRect(SDL_Rect rect, int inset) {
+    return SDL_Rect{rect.x + inset, rect.y + inset, std::max(1, rect.w - inset * 2), std::max(1, rect.h - inset * 2)};
+}
+
 bool shouldShowCandidates(const AppState& app, int row, int col, const SolveStep* current) {
     if (app.candidateMode == CandidateMode::Off) {
         return false;
@@ -1159,7 +1223,7 @@ bool shouldShowCandidates(const AppState& app, int row, int col, const SolveStep
     if (current && sameUnit(row, col, current->row, current->col)) {
         return true;
     }
-    return app.steps.empty();
+    return false;
 }
 
 void drawBoard(AppState& app) {
@@ -1170,68 +1234,200 @@ void drawBoard(AppState& app) {
     if (app.stepIndex >= 0 && app.stepIndex < static_cast<int>(app.steps.size())) {
         current = &app.steps[static_cast<size_t>(app.stepIndex)];
     }
-    fill(app.renderer, br, SDL_Color{6, 15, 16, 245});
+
+    fill(app.renderer, br, SDL_Color{5, 13, 14, 248});
+
+    // 1-5: backgrounds and soft highlights. Text is drawn later so highlights never cover digits.
     for (int r = 0; r < 9; ++r) {
         for (int c = 0; c < 9; ++c) {
             SDL_Rect cr{br.x + c * cell, br.y + r * cell, cell, cell};
+            const bool related = current && sameUnit(r, c, current->row, current->col);
+            const bool selected = r == app.selectedRow && c == app.selectedCol;
+            const bool focused = current && r == current->row && c == current->col;
+
+            fill(app.renderer, insetRect(cr, 1), SDL_Color{8, 20, 21, 92});
+
+            if (related) {
+                fill(app.renderer, cr, SDL_Color{57, 223, 255, 22});
+            }
+            if (selected) {
+                fill(app.renderer, cr, SDL_Color{83, 239, 181, 42});
+            }
             if (current && sameUnit(r, c, current->row, current->col)) {
-                fill(app.renderer, cr, SDL_Color{57, 223, 255, 26});
-            }
-            if (r == app.selectedRow && c == app.selectedCol) {
-                fill(app.renderer, cr, SDL_Color{57, 223, 255, 42});
-            }
-            if (current && r == current->row && c == current->col) {
-                fill(app.renderer, cr, SDL_Color{57, 223, 255, 82});
-                stroke(app.renderer, cr, accentForStep(current->type), 2);
-            }
-            const int value = display.getCell(r, c);
-            if (value != 0) {
-                SDL_Color color = display.isFixed(r, c) ? text : cyan;
-                if (current && r == current->row && c == current->col) {
-                    color = accentForStep(current->type);
+                const double sweep = std::fmod(stepAgeMs(app) / 900.0, 1.0);
+                const bool rowSweep = r == current->row && c == clampInt(static_cast<int>(sweep * 9.0), 0, 8);
+                const bool colSweep = c == current->col && r == clampInt(static_cast<int>(sweep * 9.0), 0, 8);
+                if (rowSweep || colSweep) {
+                    fill(app.renderer, cr, SDL_Color{57, 223, 255, 20});
                 }
-                const int scale = std::max(3, cell / ((current && r == current->row && c == current->col) ? 15 : 17));
-                drawCenteredText(app.renderer, std::to_string(value), cr, scale, color);
-            } else if (shouldShowCandidates(app, r, c, current)) {
-                const int mask = display.getCandidates(r, c);
-                for (int n = 1; n <= 9; ++n) {
-                    const int bit = Board::bitForNumber(n);
-                    const bool present = (mask & bit) != 0;
-                    const bool removedNow = current && r == current->row && c == current->col && (current->removedMask & bit) != 0;
-                    if (!present && !removedNow) {
-                        continue;
-                    }
-                    const int sx = (n - 1) % 3;
-                    const int sy = (n - 1) / 3;
-                    SDL_Rect mini{cr.x + sx * cell / 3, cr.y + sy * cell / 3, cell / 3, cell / 3};
-                    drawCenteredText(app.renderer, std::to_string(n), mini, std::max(1, cell / 36), removedNow ? red : muted);
-                    if (removedNow) {
-                        lineTo(app.renderer,
-                               mini.x + mini.w / 4,
-                               mini.y + mini.h / 2,
-                               mini.x + mini.w * 3 / 4,
-                               mini.y + mini.h / 2,
-                               red);
-                    }
+            }
+            if (focused) {
+                SDL_Color focus = accentForStep(current->type);
+                Uint8 fillAlpha = 52;
+                if (current->type == StepType::Contradiction) {
+                    focus = red;
+                    fillAlpha = 44;
+                } else if (current->type == StepType::Guess) {
+                    focus = purple;
+                    fillAlpha = 50;
+                } else if (current->type == StepType::Backtrack) {
+                    focus = SDL_Color{130, 145, 148, 255};
+                    fillAlpha = 36;
+                }
+                fill(app.renderer, cr, withAlpha(focus, fillAlpha));
+            }
+            if (current && isRemovalStep(current->type) && r == current->row && c == current->col) {
+                fill(app.renderer, cr, SDL_Color{255, 145, 79, 22});
+            }
+        }
+    }
+
+    // 6: grid lines.
+    for (int i = 0; i <= 9; ++i) {
+        SDL_Color color = (i % 3 == 0) ? SDL_Color{225, 242, 238, 214} : SDL_Color{125, 160, 154, 118};
+        const int thickness = (i % 3 == 0) ? std::max(2, cell / 32) : 1;
+        for (int t = 0; t < thickness; ++t) {
+            lineTo(app.renderer, br.x, br.y + i * cell + t, br.x + br.w, br.y + i * cell + t, color);
+            lineTo(app.renderer, br.x + i * cell + t, br.y, br.x + i * cell + t, br.y + br.h, color);
+        }
+    }
+
+    // 7: candidates, muted by default and brighter only when relevant.
+    for (int r = 0; r < 9; ++r) {
+        for (int c = 0; c < 9; ++c) {
+            SDL_Rect cr{br.x + c * cell, br.y + r * cell, cell, cell};
+            if (display.getCell(r, c) != 0 || !shouldShowCandidates(app, r, c, current)) {
+                continue;
+            }
+            const int mask = display.getCandidates(r, c);
+            const bool selected = r == app.selectedRow && c == app.selectedCol;
+            const bool related = current && sameUnit(r, c, current->row, current->col);
+            const int candidateScale = std::max(1, cell / 42);
+            for (int n = 1; n <= 9; ++n) {
+                const int bit = Board::bitForNumber(n);
+                const bool present = (mask & bit) != 0;
+                const bool removedNow = current && r == current->row && c == current->col && (current->removedMask & bit) != 0;
+                if (!present && !removedNow) {
+                    continue;
+                }
+                const int sx = (n - 1) % 3;
+                const int sy = (n - 1) / 3;
+                SDL_Rect mini{cr.x + sx * cell / 3 + cell / 24,
+                              cr.y + sy * cell / 3 + cell / 26,
+                              cell / 3 - cell / 12,
+                              cell / 3 - cell / 12};
+                SDL_Color candidateColor = muted;
+                candidateColor.a = app.candidateMode == CandidateMode::All ? 118 : 172;
+                if (selected || related) {
+                    candidateColor = SDL_Color{182, 213, 207, 214};
+                }
+                if (removedNow) {
+                    const double fade = 1.0 - easeOutCubic(stepProgress(app, 280.0));
+                    candidateColor = SDL_Color{255, 126, 96, static_cast<Uint8>(std::max(72.0, 255.0 * fade))};
+                }
+                drawCenteredText(app.renderer, std::to_string(n), mini, candidateScale, candidateColor);
+                if (removedNow) {
+                    lineTo(app.renderer,
+                           mini.x + mini.w / 5,
+                           mini.y + mini.h / 2,
+                           mini.x + mini.w * 4 / 5,
+                           mini.y + mini.h / 2,
+                           withAlpha(red, candidateColor.a));
                 }
             }
         }
     }
-    for (int i = 0; i <= 9; ++i) {
-        SDL_Color color = (i % 3 == 0) ? SDL_Color{230, 248, 244, 210} : line;
-        const int thickness = (i % 3 == 0) ? 2 : 1;
-        for (int t = 0; t < thickness; ++t) {
-            lineTo(app.renderer, br.x, br.y + i * cell + t, br.x + br.w, br.y + i * cell + t, color);
-            lineTo(app.renderer, br.x + i * cell + t, br.y, br.x + i * cell + t, br.y + br.h, color);
+
+    // 8: main digits.
+    for (int r = 0; r < 9; ++r) {
+        for (int c = 0; c < 9; ++c) {
+            SDL_Rect cr{br.x + c * cell, br.y + r * cell, cell, cell};
+            const int value = display.getCell(r, c);
+            if (value != 0) {
+                const bool focused = current && r == current->row && c == current->col;
+                SDL_Color color = display.isFixed(r, c) ? SDL_Color{235, 248, 244, 255} : SDL_Color{83, 225, 245, 255};
+                if (focused) {
+                    color = accentForStep(current->type);
+                }
+                int scale = std::max(3, cell / 17);
+                if (focused && current && isPlacementStep(current->type)) {
+                    const double t = easeOutBack(stepProgress(app, 220.0));
+                    scale = std::max(scale, static_cast<int>(std::lround(scale * (1.0 + 0.35 * (1.0 - t)))));
+                    color.a = static_cast<Uint8>(std::clamp(70.0 + 185.0 * t, 0.0, 255.0));
+                }
+                drawCenteredText(app.renderer, std::to_string(value), cr, scale, color);
+            }
+        }
+    }
+
+    // 9-10: outlines and radar pulses after text. Only strokes are used so digits remain readable.
+    if (current && Board::isInside(current->row, current->col)) {
+        SDL_Rect cr{br.x + current->col * cell, br.y + current->row * cell, cell, cell};
+        SDL_Color accent = accentForStep(current->type);
+        const double pulse = stepProgress(app, current->type == StepType::Contradiction ? 420.0 : 620.0);
+        const int grow = static_cast<int>(std::lround(cell * 0.18 * easeOutCubic(pulse)));
+        SDL_Rect ring{cr.x - grow / 2, cr.y - grow / 2, cr.w + grow, cr.h + grow};
+        const Uint8 ringAlpha = static_cast<Uint8>(std::clamp(150.0 * (1.0 - pulse), 28.0, 150.0));
+        stroke(app.renderer, ring, withAlpha(accent, ringAlpha), current->type == StepType::Contradiction ? 3 : 2);
+
+        if (current->type == StepType::Guess) {
+            stroke(app.renderer, insetRect(cr, 3), withAlpha(purple, 210), 2);
+        } else if (current->type == StepType::Backtrack) {
+            stroke(app.renderer, insetRect(cr, 3), SDL_Color{130, 145, 148, 190}, 2);
+        } else if (current->type == StepType::Contradiction) {
+            const double flash = 1.0 - stepProgress(app, 260.0);
+            stroke(app.renderer, insetRect(cr, 2), withAlpha(red, static_cast<Uint8>(150 + flash * 95)), 3);
+        } else {
+            stroke(app.renderer, insetRect(cr, 3), withAlpha(accent, 170), 2);
+        }
+    }
+
+    if (app.selectedRow >= 0 && app.selectedCol >= 0) {
+        SDL_Rect cr{br.x + app.selectedCol * cell, br.y + app.selectedRow * cell, cell, cell};
+        stroke(app.renderer, insetRect(cr, 4), SDL_Color{83, 239, 181, 165}, 1);
+    }
+
+    if (app.mistakeMode == MistakeMode::RuleCheck) {
+        for (int r = 0; r < 9; ++r) {
+            for (int c = 0; c < 9; ++c) {
+                const int value = display.getCell(r, c);
+                if (value == 0) {
+                    continue;
+                }
+                bool conflict = false;
+                for (int i = 0; i < 9 && !conflict; ++i) {
+                    conflict = (i != c && display.getCell(r, i) == value)
+                        || (i != r && display.getCell(i, c) == value);
+                }
+                const int boxRow = (r / 3) * 3;
+                const int boxCol = (c / 3) * 3;
+                for (int rr = boxRow; rr < boxRow + 3 && !conflict; ++rr) {
+                    for (int cc = boxCol; cc < boxCol + 3; ++cc) {
+                        if ((rr != r || cc != c) && display.getCell(rr, cc) == value) {
+                            conflict = true;
+                            break;
+                        }
+                    }
+                }
+                if (conflict) {
+                    SDL_Rect cr{br.x + c * cell, br.y + r * cell, cell, cell};
+                    stroke(app.renderer, insetRect(cr, 5), withAlpha(red, 205), 2);
+                }
+            }
         }
     }
 }
 
 void drawButtons(AppState& app) {
     for (const Button& button : app.buttons) {
-        fill(app.renderer, button.rect, SDL_Color{14, 26, 27, 230});
-        stroke(app.renderer, button.rect, SDL_Color{82, 150, 162, 180});
-        drawCenteredText(app.renderer, button.label, button.rect, button.rect.h < 34 ? 2 : 3, text);
+        const bool execute = button.id == "cmd_exec";
+        fill(app.renderer, button.rect, execute ? SDL_Color{16, 35, 35, 238} : SDL_Color{11, 24, 25, 228});
+        stroke(app.renderer, button.rect, execute ? SDL_Color{83, 239, 181, 170} : SDL_Color{82, 150, 162, 155});
+        drawCenteredText(app.renderer,
+                         button.label,
+                         button.rect,
+                         button.rect.h < 34 ? 2 : 3,
+                         execute ? text : SDL_Color{195, 218, 213, 235});
     }
 }
 
@@ -1245,20 +1441,22 @@ void drawPanel(AppState& app) {
     const int w = pr.w - pad * 2;
     int y = pr.y + pad;
     drawTextInRect(app.renderer, "Sudoku Reasoning Radar", SDL_Rect{x, y, w, 24}, compact ? 2 : 3, text);
-    y += compact ? 22 : 30;
-    drawTextInRect(app.renderer, "Web Preview v0.3.0", SDL_Rect{x, y, w, 18}, 2, green);
-    y += compact ? 24 : 34;
+    SDL_Rect badge{x, y + (compact ? 24 : 30), std::min(w, 252), 24};
+    fill(app.renderer, badge, SDL_Color{10, 31, 30, 225});
+    stroke(app.renderer, badge, SDL_Color{83, 239, 181, 120});
+    drawTextInRect(app.renderer, WebVersionLabel, SDL_Rect{badge.x + 8, badge.y + 5, badge.w - 16, 14}, 2, green);
+    y += compact ? 56 : 66;
 
-    const int statusH = compact ? 76 : 126;
+    const int statusH = compact ? 82 : 136;
     SDL_Rect statusCard{x, y, w, statusH};
     drawCard(app.renderer, statusCard);
     int rowY = statusCard.y + 12;
     const int rowH = compact ? 16 : 19;
     drawLabelValue(app.renderer, "Mode", modeName(app.solverMode), SDL_Rect{statusCard.x + 12, rowY, statusCard.w - 24, rowH}, 2);
     rowY += rowH;
-    drawLabelValue(app.renderer, "Puzzle", app.puzzleName, SDL_Rect{statusCard.x + 12, rowY, statusCard.w - 24, rowH}, 2);
-    rowY += rowH;
     drawLabelValue(app.renderer, "Status", app.playing && !app.paused ? "Playing Steps" : app.status, SDL_Rect{statusCard.x + 12, rowY, statusCard.w - 24, rowH}, 2, amber);
+    rowY += rowH;
+    drawLabelValue(app.renderer, "Puzzle", app.puzzleName, SDL_Rect{statusCard.x + 12, rowY, statusCard.w - 24, rowH}, 2);
     if (!compact) {
         rowY += rowH;
         drawLabelValue(app.renderer, "Difficulty", app.report.summary == "No analysis yet." ? difficultyName(app.difficulty) : gradeName(app.report),
@@ -1293,16 +1491,18 @@ void drawPanel(AppState& app) {
     }
 
     const int buttonY = app.buttons.empty() ? pr.y + pr.h - pad - 38 : app.buttons.front().rect.y;
-    const int deckH = compact ? 66 : 82;
-    const int progressH = 54;
-    const int deckY = buttonY - deckH - 8;
+    const int deckH = compact ? 72 : 94;
+    const int progressH = 58;
+    const int deckY = buttonY - deckH - 10;
     const int progressY = deckY - progressH - 10;
-    const int reasonBottom = std::max(y + 70, progressY - 10);
+    const int reasonBottom = std::max(y + 84, progressY - 12);
     SDL_Rect reasonCard{x, y, w, std::max(54, reasonBottom - y)};
     drawCard(app.renderer, reasonCard, SDL_Color{57, 223, 255, 120});
     drawText(app.renderer, "Focus", reasonCard.x + 12, reasonCard.y + 12, 2, green);
     std::string reasonText = app.status;
+    std::string badgeText = "Ready";
     SDL_Color reasonColor = text;
+    SDL_Color badgeColor = green;
     if (!app.steps.empty() && app.stepIndex >= 0 && app.stepIndex < static_cast<int>(app.steps.size())) {
         const SolveStep& step = app.steps[static_cast<size_t>(app.stepIndex)];
         std::ostringstream out;
@@ -1316,13 +1516,24 @@ void drawPanel(AppState& app) {
         out << ". " << step.reason;
         reasonText = out.str();
         reasonColor = accentForStep(step.type);
+        badgeText = stepName(step.type);
+        badgeColor = reasonColor;
     } else if (app.currentHint.available) {
         reasonText = app.currentHint.message + " " + app.currentHint.explanation;
         reasonColor = cyan;
+        badgeText = "Hint";
+        badgeColor = cyan;
     }
+    SDL_Rect techniqueBadge{reasonCard.x + reasonCard.w - 136, reasonCard.y + 10, 124, 24};
+    fill(app.renderer, techniqueBadge, withAlpha(badgeColor, 34));
+    stroke(app.renderer, techniqueBadge, withAlpha(badgeColor, 140));
+    drawCenteredText(app.renderer, badgeText, techniqueBadge, 2, withAlpha(badgeColor, 235));
+    const double reasonEase = easeOutCubic(stepProgress(app, 170.0));
+    const int reasonOffset = static_cast<int>(std::lround(5.0 * (1.0 - reasonEase)));
+    reasonColor.a = static_cast<Uint8>(std::clamp(176.0 + 79.0 * reasonEase, 176.0, 255.0));
     drawWrappedText(app.renderer,
                     reasonText,
-                    SDL_Rect{reasonCard.x + 12, reasonCard.y + 38, reasonCard.w - 24, reasonCard.h - 48},
+                    SDL_Rect{reasonCard.x + 12, reasonCard.y + 42 + reasonOffset, reasonCard.w - 24, reasonCard.h - 54},
                     2,
                     reasonColor,
                     compact ? 2 : 4);
@@ -1331,16 +1542,18 @@ void drawPanel(AppState& app) {
     drawCard(app.renderer, progressCard);
     const int totalSteps = static_cast<int>(app.steps.size());
     const int visibleStep = app.stepIndex < 0 ? 0 : app.stepIndex + 1;
+    const SDL_Color stepAccent = totalSteps > 0 && app.stepIndex >= 0 ? accentForStep(app.steps[static_cast<size_t>(app.stepIndex)].type) : cyan;
+    fill(app.renderer, SDL_Rect{progressCard.x + 12, progressCard.y + 12, 10, 10}, withAlpha(stepAccent, 220));
     drawTextInRect(app.renderer,
-                   "Progress  Step " + std::to_string(visibleStep) + " / " + std::to_string(totalSteps),
-                   SDL_Rect{progressCard.x + 12, progressCard.y + 10, progressCard.w - 24, 18},
+                   "Step " + std::to_string(visibleStep) + " / " + std::to_string(totalSteps),
+                   SDL_Rect{progressCard.x + 30, progressCard.y + 8, progressCard.w - 42, 18},
                    2,
                    muted);
-    SDL_Rect track{progressCard.x + 12, progressCard.y + 34, progressCard.w - 24, 8};
+    SDL_Rect track{progressCard.x + 12, progressCard.y + 36, progressCard.w - 24, 8};
     fill(app.renderer, track, SDL_Color{35, 48, 49, 255});
     const double progress = totalSteps <= 0 ? 0.0 : static_cast<double>(visibleStep) / static_cast<double>(totalSteps);
     SDL_Rect bar{track.x, track.y, static_cast<int>(track.w * std::max(0.0, std::min(1.0, progress))), track.h};
-    fill(app.renderer, bar, totalSteps > 0 && app.stepIndex >= 0 ? accentForStep(app.steps[static_cast<size_t>(app.stepIndex)].type) : cyan);
+    fill(app.renderer, bar, stepAccent);
 
     SDL_Rect deckCard{x, deckY, w, deckH};
     drawCard(app.renderer, deckCard, SDL_Color{188, 132, 255, 120});
@@ -1352,7 +1565,7 @@ void drawPanel(AppState& app) {
                    2,
                    text);
     if (!compact) {
-        drawWrappedText(app.renderer, command.description, SDL_Rect{deckCard.x + 12, deckCard.y + 54, deckCard.w - 24, 22}, 1, muted, 1);
+        drawWrappedText(app.renderer, command.description, SDL_Rect{deckCard.x + 12, deckCard.y + 56, deckCard.w - 24, 28}, 1, muted, 2);
     }
     drawButtons(app);
 }
@@ -1411,7 +1624,7 @@ std::vector<std::string> overlayLines(const AppState& app) {
         lines.push_back("Use Change Difficulty or Generate Puzzle in the Command Deck.");
         break;
     case OverlayPage::About:
-        lines.push_back("Sudoku Reasoning Radar v0.3.0 Web Preview.");
+        lines.push_back(std::string("Sudoku Reasoning Radar ") + WebVersionLabel + ".");
         lines.push_back("This preview shares the solver core and Command Deck model, with OCR disabled for browser builds.");
         break;
     case OverlayPage::None:
@@ -1466,7 +1679,7 @@ void render(AppState& app) {
     drawBackground(app);
     const int headerX = clampInt(app.width / 48, 16, Margin);
     drawText(app.renderer, "Sudoku Reasoning Radar", headerX, 18, app.width < 900 ? 2 : 3, text);
-    drawText(app.renderer, "WebAssembly Preview", headerX, app.width < 900 ? 40 : 46, 2, green);
+    drawText(app.renderer, WebVersionLabel, headerX, app.width < 900 ? 40 : 48, 2, green);
     drawBoard(app);
     drawPanel(app);
     drawOverlay(app);
@@ -1478,7 +1691,7 @@ void update(AppState& app) {
     if (app.lastFrameTicks == 0) {
         app.lastFrameTicks = now;
     }
-    const Uint32 dt = std::min<Uint32>(now - app.lastFrameTicks, 100);
+    const Uint32 dt = std::min<Uint32>(now - app.lastFrameTicks, 50);
     app.lastFrameTicks = now;
     (void)dt;
     if (app.playing && !app.paused && !app.steps.empty()) {
@@ -1537,6 +1750,7 @@ bool initApp(AppState& app) {
         SDL_Quit();
         return false;
     }
+    SDL_SetRenderDrawBlendMode(app.renderer, SDL_BLENDMODE_BLEND);
     SDL_GetWindowSize(app.window, &app.width, &app.height);
     SDL_StartTextInput();
     app.board.initializeCandidates();

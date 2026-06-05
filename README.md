@@ -1,8 +1,8 @@
 # Sudoku Reasoning Radar
 
-Version: v0.3.0 WebAssembly Preview + v0.2.1 Windows desktop
+Version: v0.3.0-preview.2 WebAssembly Preview + v0.2.1 Windows desktop
 
-A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract, plus a v0.3.0 WebAssembly browser preview built with Emscripten and SDL2. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import on Windows, mistake detection, and local puzzle storage.
+A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract, plus a v0.3.0-preview.2 WebAssembly browser preview built with Emscripten and SDL2. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import on Windows, mistake detection, and local puzzle storage.
 
 ## Prompt 2 Features
 
@@ -58,11 +58,12 @@ Known limitations:
 - OCR mistakes may make a puzzle invalid or unsolvable.
 - Manual correction is part of the intended workflow.
 
-## v0.3.0 WebAssembly Browser Preview
+## v0.3.0-preview.2 WebAssembly Browser Preview
 
 - Browser-playable Sudoku board compiled from `web_main.cpp` with Emscripten.
 - Uses the existing solver core: Board, Solver, DLXSolver, StepRecorder, PuzzleGenerator, HintCoach, and DifficultyAnalyzer.
 - Includes editable cells, candidate display, solver mode switching, puzzle generation, hint coach, difficulty analysis, mistake checking, import/export string overlay, localStorage puzzle save/load, settings/analytics/library/shortcuts overlays, and animated trace scrubbing.
+- Preview.2 is a visual polish release: lower-alpha Web highlights, digits always rendered above overlays, placement pulse animation, candidate-removal strike-through fade, cleaner Focus Panel hierarchy, refined Command Deck spacing, and responsive layout polish.
 - Uses an Emscripten main loop through `emscripten_set_main_loop_arg`.
 - GitHub Pages output lives in `docs/play/`.
 - The playable page is a full-viewport app shell: a compact top bar plus an SDL canvas that fills the remaining browser space.
@@ -346,7 +347,7 @@ The main interface now uses progressive disclosure. The board and current reason
 - Turbo mode focuses on speed and uniqueness detection, not detailed human-style animation.
 - Visual animations are SDL2-based and intentionally lightweight.
 - Human Logic Mode can stop on puzzles that require techniques beyond the implemented set.
-- The v0.3.0 Web Preview disables OCR and uses browser `localStorage` for a lightweight puzzle library.
+- The v0.3.0-preview.2 Web Preview disables OCR and uses browser `localStorage` for a lightweight puzzle library.
 - The browser build prioritizes logical-pixel correctness over high-DPI supersampling, so canvas rendering and mouse hit testing stay aligned across resize and fullscreen.
 
 ## Roadmap

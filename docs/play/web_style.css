@@ -10,7 +10,7 @@
     --green: #53efb5;
     --amber: #ffd166;
     --rose: #ff6f91;
-    --topbar-height: 70px;
+    --topbar-height: 66px;
 }
 
 * {
@@ -60,13 +60,13 @@ button {
 .web-topbar {
     flex: 0 0 var(--topbar-height);
     display: grid;
-    grid-template-columns: minmax(220px, 1fr) auto minmax(320px, 1fr);
+    grid-template-columns: minmax(230px, 1fr) auto minmax(330px, 1fr);
     align-items: center;
-    gap: 16px;
+    gap: 18px;
     height: var(--topbar-height);
     padding: 0 clamp(14px, 2.4vw, 34px);
     border-bottom: 1px solid var(--line);
-    background: rgba(5, 7, 7, 0.86);
+    background: rgba(5, 7, 7, 0.9);
     backdrop-filter: blur(18px);
 }
 
@@ -115,6 +115,7 @@ button {
     background: rgba(14, 23, 25, 0.72);
     font-size: 0.9rem;
     font-weight: 760;
+    white-space: nowrap;
 }
 
 .web-links {
@@ -131,10 +132,17 @@ button {
     border: 1px solid var(--line);
     padding: 0 14px;
     background: rgba(14, 23, 25, 0.78);
+    transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
 }
 
 .web-links button {
     border-color: rgba(57, 223, 255, 0.54);
+}
+
+.web-links a:hover,
+.web-links button:hover {
+    border-color: rgba(83, 239, 181, 0.62);
+    background: rgba(22, 38, 39, 0.86);
 }
 
 .canvas-wrap {
@@ -159,6 +167,7 @@ canvas {
     height: 100%;
     outline: none;
     background: #050809;
+    image-rendering: auto;
 }
 
 .loading-panel {
