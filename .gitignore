@@ -17,6 +17,7 @@ docs/downloads/*.zip
 *.tmp
 *.log
 .worktrees/
+.superpowers/
 
 # VS Code local cache
 .vscode/ipch/
