@@ -16,6 +16,7 @@ docs/downloads/*.zip
 # Temporary files
 *.tmp
 *.log
+.worktrees/
 
 # VS Code local cache
 .vscode/ipch/
