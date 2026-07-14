@@ -12,6 +12,7 @@ release/
 web_build/
 out/
 node_modules/
+dist/
 website/downloads/*.zip
 docs/downloads/*.zip
 

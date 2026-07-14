@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://sudoku-reasoning-radar.invalid/schemas/solve-trace-v1.schema.json",
+  "title": "Sudoku Reasoning Radar SolveTrace v1",
+  "type": "array",
+  "items": { "$ref": "#/$defs/traceStep" },
+  "$defs": {
+    "cell": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["row", "col"],
+      "properties": {
+        "row": { "type": "integer", "minimum": 0, "maximum": 8 },
+        "col": { "type": "integer", "minimum": 0, "maximum": 8 }
+      }
+    },
+    "technique": {
+      "enum": [
+        "naked-single", "hidden-single", "locked-candidate", "box-line-reduction",
+        "naked-pair", "hidden-pair", "x-wing", null
+      ]
+    },
+    "traceStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "technique", "action", "targets", "candidateDeltas", "evidence",
+        "branch", "explanationKey", "params"
+      ],
+      "properties": {
+        "id": { "type": "string", "pattern": "^step-[0-9]{6}$" },
+        "technique": { "$ref": "#/$defs/technique" },
+        "action": {
+          "enum": ["observe", "eliminate", "place", "inform", "branch", "contradict", "revert", "complete"]
+        },
+        "targets": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
+        "candidateDeltas": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["cell", "beforeMask", "afterMask", "removedMask"],
+            "properties": {
+              "cell": { "$ref": "#/$defs/cell" },
+              "beforeMask": { "type": "integer", "minimum": 0, "maximum": 511 },
+              "afterMask": { "type": "integer", "minimum": 0, "maximum": 511 },
+              "removedMask": { "type": "integer", "minimum": 0, "maximum": 511 }
+            }
+          }
+        },
+        "evidence": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["nodes", "edges"],
+          "properties": {
+            "nodes": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["id", "kind"],
+                "properties": {
+                  "id": { "type": "string" },
+                  "kind": { "type": "string" },
+                  "row": { "type": "integer", "minimum": 0, "maximum": 8 },
+                  "col": { "type": "integer", "minimum": 0, "maximum": 8 },
+                  "value": { "type": "integer", "minimum": 1, "maximum": 9 },
+                  "mask": { "type": "integer", "minimum": 0, "maximum": 511 }
+                }
+              }
+            },
+            "edges": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["from", "to", "relation"],
+                "properties": {
+                  "from": { "type": "string" },
+                  "to": { "type": "string" },
+                  "relation": { "enum": ["supports", "excludes", "conflicts", "branches", "reverts"] }
+                }
+              }
+            }
+          }
+        },
+        "branch": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["depth", "parentId"],
+          "properties": {
+            "depth": { "type": "integer", "minimum": 0 },
+            "parentId": { "type": ["string", "null"] }
+          }
+        },
+        "explanationKey": { "type": "string", "pattern": "^trace\\." },
+        "params": {
+          "type": "object",
+          "additionalProperties": { "type": ["integer", "string"] }
+        }
+      }
+    }
+  }
+}

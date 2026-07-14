@@ -45,16 +45,23 @@ On Windows, run native CMake commands in a compiler-enabled developer shell.
 
 ## WebAssembly core
 
-Activate the desired Emscripten SDK so that `EMSDK` and the Emscripten tools are
+The release toolchain is pinned in `toolchains/emscripten.json` to Emscripten
+6.0.3, SDK release hash `9074aa513b501925adb1361e208932ad32a29a5f`.
+Activate that Emscripten SDK so that `EMSDK` and the Emscripten tools are
 available, then run:
 
 ```sh
 cmake --preset wasm-release
-cmake --build --preset wasm-release
+cmake --build --preset wasm-release --target srr_core_wasm
 ```
 
 The preset derives its toolchain file from the active `EMSDK` environment and
-contains no machine-specific SDK path.
+contains no machine-specific SDK path. The target emits `srr-core.js` and
+`srr-core.wasm`; it exports only `srr_dispatch`, `srr_free`, `malloc`, and
+`free` and has no SDL dependency.
+
+`pnpm build` always builds the TypeScript core client and also builds this WASM
+target when `EMSDK` is active.
 
 ## Application commands
 

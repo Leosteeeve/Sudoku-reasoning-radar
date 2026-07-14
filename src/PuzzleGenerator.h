@@ -4,6 +4,7 @@
 #include "DifficultyAnalyzer.h"
 
 #include <random>
+#include <cstdint>
 #include <string>
 
 enum class PuzzleDifficulty {
@@ -28,6 +29,7 @@ struct GeneratedPuzzle {
 class PuzzleGenerator {
 public:
     GeneratedPuzzle generate(PuzzleDifficulty difficulty);
+    GeneratedPuzzle generate(PuzzleDifficulty difficulty, std::uint32_t seed);
 
     static std::string difficultyName(PuzzleDifficulty difficulty);
     static PuzzleDifficulty nextDifficulty(PuzzleDifficulty difficulty);
@@ -38,4 +40,5 @@ private:
     int maxAttempts(PuzzleDifficulty difficulty) const;
     bool hasUniqueSolution(const Board& board, Board* solution = nullptr) const;
     std::string makeSeed() const;
+    GeneratedPuzzle generateWithSeed(PuzzleDifficulty difficulty, const std::string& seed);
 };

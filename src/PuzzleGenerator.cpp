@@ -11,10 +11,20 @@
 #include <vector>
 
 GeneratedPuzzle PuzzleGenerator::generate(PuzzleDifficulty difficulty) {
+    return generateWithSeed(difficulty, makeSeed());
+}
+
+GeneratedPuzzle PuzzleGenerator::generate(PuzzleDifficulty difficulty, std::uint32_t seed) {
+    std::ostringstream encoded;
+    encoded << std::hex << seed;
+    return generateWithSeed(difficulty, encoded.str());
+}
+
+GeneratedPuzzle PuzzleGenerator::generateWithSeed(PuzzleDifficulty difficulty, const std::string& seed) {
     const auto started = std::chrono::steady_clock::now();
     GeneratedPuzzle generated;
     generated.difficulty = difficulty;
-    generated.seed = makeSeed();
+    generated.seed = seed;
     std::mt19937 rng(static_cast<unsigned int>(std::stoul(generated.seed, nullptr, 16)));
 
     generated.solution = generateSolvedBoard(rng);

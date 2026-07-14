@@ -11,8 +11,10 @@
     "bootstrap": "node scripts/bootstrap.mjs",
     "dev:web": "node scripts/not-yet-available.mjs dev:web",
     "dev:desktop": "node scripts/not-yet-available.mjs dev:desktop",
-    "build": "node scripts/not-yet-available.mjs build",
-    "test": "cmake --preset native-debug && cmake --build --preset native-debug && ctest --preset native-debug --output-on-failure",
+    "build": "pnpm --filter @srr/core-client build && node scripts/build-wasm.mjs",
+    "build:wasm": "cmake --preset wasm-release && cmake --build --preset wasm-release --target srr_core_wasm",
+    "test": "cmake --preset native-debug && cmake --build --preset native-debug && ctest --preset native-debug --output-on-failure && pnpm --filter @srr/core-client test && pnpm --filter @srr/core-client typecheck && node --test scripts/*.test.mjs",
+    "test:wasm-artifact": "node --test scripts/wasm-artifact.test.mjs",
     "package:windows": "node scripts/not-yet-available.mjs package:windows"
   }
 }
