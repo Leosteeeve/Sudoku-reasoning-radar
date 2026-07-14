@@ -1,0 +1,18 @@
+{
+  "name": "sudoku-reasoning-radar",
+  "version": "0.4.0-beta.1",
+  "private": true,
+  "packageManager": "pnpm@11.0.0",
+  "engines": {
+    "node": "24.x",
+    "pnpm": "11.x"
+  },
+  "scripts": {
+    "bootstrap": "node scripts/bootstrap.mjs",
+    "dev:web": "node scripts/not-yet-available.mjs dev:web",
+    "dev:desktop": "node scripts/not-yet-available.mjs dev:desktop",
+    "build": "node scripts/not-yet-available.mjs build",
+    "test": "cmake --preset native-debug && cmake --build --preset native-debug && ctest --preset native-debug --output-on-failure",
+    "package:windows": "node scripts/not-yet-available.mjs package:windows"
+  }
+}

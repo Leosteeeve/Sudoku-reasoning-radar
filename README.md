@@ -4,6 +4,10 @@ Version: v0.3.0 Browser Edition + v0.2.1 Windows desktop OCR baseline
 
 A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract, plus a v0.3.0 Browser Edition built with Emscripten and SDL2. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import on Windows, browser image-assisted import, mistake detection, and local puzzle storage.
 
+The portable v1 core build, prerequisite diagnostic, CMake presets, and pnpm
+commands are documented in [docs/BUILD.md](docs/BUILD.md). Existing batch and
+PowerShell build scripts are retained as legacy v0.3 compatibility paths.
+
 ## Prompt 2 Features
 
 - Three solver modes: Human Logic, Smart Solver, and Turbo Exact Cover.
@@ -233,7 +237,10 @@ OCR Review controls:
 - Invalid - Duplicate In Row
 - Multiple - Two Rows Open
 
-## Build
+## Legacy Windows Build (v0.3)
+
+This section documents the legacy SDL/OCR compatibility build. New core work
+uses the portable commands in [docs/BUILD.md](docs/BUILD.md).
 
 Install dependencies in MSYS2 UCRT64 if needed:
 

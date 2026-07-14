@@ -10,6 +10,8 @@
 *.zip
 release/
 web_build/
+out/
+node_modules/
 website/downloads/*.zip
 docs/downloads/*.zip
 
