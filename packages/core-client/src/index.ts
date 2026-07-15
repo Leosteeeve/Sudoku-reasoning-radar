@@ -1,27 +1,28 @@
 export const SCHEMA_VERSION = 1 as const;
 
-export type SolverMode = "human-logic" | "smart" | "turbo";
+export type SolverMode = "human" | "smart" | "turbo";
 export type PuzzleDifficulty = "easy" | "medium" | "hard" | "expert";
 export type HintLevel = "gentle" | "technique" | "direct";
 export type SolveClassification = "invalid" | "unsolvable" | "unique" | "multiple";
 export type TechniqueId =
-  | "naked-single"
-  | "hidden-single"
-  | "locked-candidate"
-  | "box-line-reduction"
-  | "naked-pair"
-  | "hidden-pair"
-  | "x-wing";
+  | "naked_single"
+  | "hidden_single"
+  | "locked_candidate"
+  | "box_line_reduction"
+  | "naked_pair"
+  | "hidden_pair"
+  | "x_wing"
+  | "mrv_guess"
+  | "exact_cover";
 export type TraceAction =
-  | "observe"
-  | "eliminate"
+  | "analyze"
   | "place"
-  | "inform"
-  | "branch"
-  | "contradict"
-  | "revert"
+  | "eliminate"
+  | "guess"
+  | "contradiction"
+  | "backtrack"
   | "complete";
-export type EvidenceRelation = "supports" | "excludes" | "conflicts" | "branches" | "reverts";
+export type EvidenceRelation = "supports" | "excludes" | "conflicts" | "branches_to" | "reverts";
 
 export interface CellRef {
   row: number;
@@ -32,16 +33,15 @@ export interface CandidateDelta {
   cell: CellRef;
   beforeMask: number;
   afterMask: number;
-  removedMask: number;
+  removedDigits: number[];
 }
 
 export interface EvidenceNode {
   id: string;
-  kind: string;
-  row?: number;
-  col?: number;
-  value?: number;
-  mask?: number;
+  kind: "cell" | "candidate" | "unit" | "branch";
+  cell?: CellRef;
+  digit?: number;
+  unit?: { kind: "row" | "column" | "box"; index: number };
 }
 
 export interface EvidenceEdge {
@@ -50,17 +50,19 @@ export interface EvidenceEdge {
   relation: EvidenceRelation;
 }
 
-export interface TraceStep {
+export interface SolveStepV1 {
   id: string;
   technique: TechniqueId | null;
   action: TraceAction;
   targets: CellRef[];
   candidateDeltas: CandidateDelta[];
   evidence: { nodes: EvidenceNode[]; edges: EvidenceEdge[] };
-  branch: { depth: number; parentId: string | null };
+  branch: { depth: number; parentStepId?: string };
   explanationKey: string;
-  params: Record<string, number | string>;
+  explanationParams: Record<string, number | string>;
 }
+
+export type TraceStep = SolveStepV1;
 
 export interface DifficultyStats {
   nakedSingles: number;
@@ -86,12 +88,15 @@ export interface DifficultyReport {
   stats: DifficultyStats;
 }
 
-export interface SolveRequest {
+export interface SolveRequestV1 {
   schemaVersion: 1;
-  operation: "solve";
   puzzle: string;
   mode: SolverMode;
   includeTrace: boolean;
+}
+
+export interface SolveRequest extends SolveRequestV1 {
+  operation: "solve";
 }
 
 export interface GenerateRequest {
@@ -123,13 +128,16 @@ interface SuccessEnvelope<Operation extends CoreRequest["operation"]> {
   ok: true;
 }
 
-export interface SolveResponse extends SuccessEnvelope<"solve"> {
+export interface SolveResponseV1 {
+  schemaVersion: 1;
   result: SolveClassification;
-  solution: string | null;
-  elapsedMicros: number;
+  solution?: string;
+  elapsedMicroseconds: number;
   difficulty: DifficultyReport;
-  steps?: TraceStep[];
+  steps: SolveStepV1[];
 }
+
+export interface SolveResponse extends SuccessEnvelope<"solve">, SolveResponseV1 {}
 
 export interface GenerateResponse extends SuccessEnvelope<"generate"> {
   puzzle: string;
@@ -143,6 +151,7 @@ export interface GenerateResponse extends SuccessEnvelope<"generate"> {
 
 export interface HintResponse extends SuccessEnvelope<"hint"> {
   available: boolean;
+  disclosure: HintLevel;
   step: TraceStep | null;
 }
 
@@ -194,30 +203,31 @@ export class CoreProtocolError extends Error {
   }
 }
 
-const modes = ["human-logic", "smart", "turbo"] as const;
+const modes = ["human", "smart", "turbo"] as const;
 const difficulties = ["easy", "medium", "hard", "expert"] as const;
 const hintLevels = ["gentle", "technique", "direct"] as const;
 const classifications = ["invalid", "unsolvable", "unique", "multiple"] as const;
 const techniques = [
-  "naked-single",
-  "hidden-single",
-  "locked-candidate",
-  "box-line-reduction",
-  "naked-pair",
-  "hidden-pair",
-  "x-wing",
+  "naked_single",
+  "hidden_single",
+  "locked_candidate",
+  "box_line_reduction",
+  "naked_pair",
+  "hidden_pair",
+  "x_wing",
+  "mrv_guess",
+  "exact_cover",
 ] as const;
 const actions = [
-  "observe",
-  "eliminate",
+  "analyze",
   "place",
-  "inform",
-  "branch",
-  "contradict",
-  "revert",
+  "eliminate",
+  "guess",
+  "contradiction",
+  "backtrack",
   "complete",
 ] as const;
-const relations = ["supports", "excludes", "conflicts", "branches", "reverts"] as const;
+const relations = ["supports", "excludes", "conflicts", "branches_to", "reverts"] as const;
 const grades = [...difficulties, "invalid", "multiple", "unsolvable"] as const;
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -236,6 +246,14 @@ function protocolFailure(detail: string): never {
   throw new CoreProtocolError(`Invalid core response: ${detail}`, "invalid_response");
 }
 
+function hasOnlyKeys(value: Record<string, unknown>, allowed: readonly string[]): boolean {
+  return Object.keys(value).every((key) => allowed.includes(key));
+}
+
+function requireOnlyKeys(value: Record<string, unknown>, allowed: readonly string[], detail: string): void {
+  if (!hasOnlyKeys(value, allowed)) protocolFailure(`${detail} unknown field`);
+}
+
 function normalizePuzzle(puzzle: unknown): string {
   if (typeof puzzle !== "string") {
     throw new CoreProtocolError("Puzzle must be a string", "wrong_type", "$.puzzle");
@@ -251,6 +269,7 @@ function validateCell(value: unknown, detail: string): asserts value is CellRef 
   if (!isRecord(value) || !isInteger(value.row, 0, 8) || !isInteger(value.col, 0, 8)) {
     protocolFailure(detail);
   }
+  requireOnlyKeys(value, ["row", "col"], detail);
 }
 
 function validateTraceStep(value: unknown): asserts value is TraceStep {
@@ -259,41 +278,73 @@ function validateTraceStep(value: unknown): asserts value is TraceStep {
       || !isMember(actions, value.action) || !Array.isArray(value.targets)
       || !Array.isArray(value.candidateDeltas) || !isRecord(value.evidence)
       || !isRecord(value.branch) || typeof value.explanationKey !== "string"
-      || !isRecord(value.params)) {
+      || !isRecord(value.explanationParams)) {
     protocolFailure("trace step shape");
+  }
+  requireOnlyKeys(value, [
+    "id", "technique", "action", "targets", "candidateDeltas", "evidence",
+    "branch", "explanationKey", "explanationParams",
+  ], "trace step");
+  if (!/^step-[0-9]{6}$/.test(value.id)
+      || !/^(?:trace|hint)\.[A-Za-z][A-Za-z0-9]*$/.test(value.explanationKey)) {
+    protocolFailure("trace identifiers");
   }
   value.targets.forEach((target) => validateCell(target, "trace target"));
   for (const delta of value.candidateDeltas) {
     if (!isRecord(delta)) protocolFailure("candidate delta");
+    requireOnlyKeys(delta, ["cell", "beforeMask", "afterMask", "removedDigits"], "candidate delta");
     validateCell(delta.cell, "candidate delta cell");
     if (!isInteger(delta.beforeMask, 0, 511) || !isInteger(delta.afterMask, 0, 511)
-        || !isInteger(delta.removedMask, 0, 511)) {
+        || !Array.isArray(delta.removedDigits)
+        || !delta.removedDigits.every((digit) => isInteger(digit, 1, 9))) {
       protocolFailure("candidate masks");
     }
   }
+  requireOnlyKeys(value.evidence, ["nodes", "edges"], "evidence graph");
   if (!Array.isArray(value.evidence.nodes) || !Array.isArray(value.evidence.edges)) {
     protocolFailure("evidence graph");
   }
+  const evidenceIds = new Set<string>();
   for (const node of value.evidence.nodes) {
-    if (!isRecord(node) || typeof node.id !== "string" || typeof node.kind !== "string") {
+    if (!isRecord(node) || typeof node.id !== "string"
+        || !/^step-[0-9]{6}(?:-(?:cell-[1-9][0-9]*|candidate|unit|result))?$/.test(node.id)
+        || !isMember(["cell", "candidate", "unit", "branch"] as const, node.kind)) {
       protocolFailure("evidence node");
     }
-    if (node.row !== undefined && !isInteger(node.row, 0, 8)) protocolFailure("evidence node row");
-    if (node.col !== undefined && !isInteger(node.col, 0, 8)) protocolFailure("evidence node col");
-    if (node.value !== undefined && !isInteger(node.value, 1, 9)) protocolFailure("evidence node value");
-    if (node.mask !== undefined && !isInteger(node.mask, 0, 511)) protocolFailure("evidence node mask");
+    requireOnlyKeys(node, ["id", "kind", "cell", "digit", "unit"], "evidence node");
+    if (evidenceIds.has(node.id)) protocolFailure("duplicate evidence node id");
+    evidenceIds.add(node.id);
+    if (node.cell !== undefined) validateCell(node.cell, "evidence node cell");
+    if (node.digit !== undefined && !isInteger(node.digit, 1, 9)) protocolFailure("evidence node digit");
+    if (node.unit !== undefined) {
+      if (!isRecord(node.unit) || !isMember(["row", "column", "box"] as const, node.unit.kind)
+          || !isInteger(node.unit.index, 0, 8)) protocolFailure("evidence node unit");
+      requireOnlyKeys(node.unit, ["kind", "index"], "evidence node unit");
+    }
+    if (node.kind === "cell" && node.cell === undefined) protocolFailure("cell evidence node");
+    if (node.kind === "candidate" && (node.cell === undefined || node.digit === undefined)) {
+      protocolFailure("candidate evidence node");
+    }
+    if (node.kind === "unit" && node.unit === undefined) protocolFailure("unit evidence node");
+    if (node.kind === "branch" && (node.cell !== undefined || node.digit !== undefined || node.unit !== undefined)) {
+      protocolFailure("branch evidence node");
+    }
   }
   for (const edge of value.evidence.edges) {
     if (!isRecord(edge) || typeof edge.from !== "string" || typeof edge.to !== "string"
         || !isMember(relations, edge.relation)) {
       protocolFailure("evidence edge");
     }
+    requireOnlyKeys(edge, ["from", "to", "relation"], "evidence edge");
+    if (!evidenceIds.has(edge.from) || !evidenceIds.has(edge.to)) protocolFailure("evidence edge endpoint");
   }
   if (!isInteger(value.branch.depth, 0)
-      || !(value.branch.parentId === null || typeof value.branch.parentId === "string")) {
+      || !(value.branch.parentStepId === undefined
+        || (typeof value.branch.parentStepId === "string" && /^step-[0-9]{6}$/.test(value.branch.parentStepId)))) {
     protocolFailure("branch metadata");
   }
-  for (const parameter of Object.values(value.params)) {
+  requireOnlyKeys(value.branch, ["depth", "parentStepId"], "branch metadata");
+  for (const parameter of Object.values(value.explanationParams)) {
     if (!(typeof parameter === "string" || isInteger(parameter, Number.MIN_SAFE_INTEGER))) {
       protocolFailure("localization parameter");
     }
@@ -307,6 +358,9 @@ function validateDifficulty(value: unknown): asserts value is DifficultyReport {
         || isMember(techniques, value.hardestTechnique)) || !isRecord(value.stats)) {
     protocolFailure("difficulty report");
   }
+  requireOnlyKeys(value, [
+    "grade", "score", "givens", "emptyCells", "maxBranchDepth", "hardestTechnique", "stats",
+  ], "difficulty report");
   const keys: (keyof DifficultyStats)[] = [
     "nakedSingles", "hiddenSingles", "lockedCandidates", "boxLineReductions",
     "nakedPairs", "hiddenPairs", "xWings", "guesses", "backtracks",
@@ -315,6 +369,7 @@ function validateDifficulty(value: unknown): asserts value is DifficultyReport {
   for (const key of keys) {
     if (!isInteger(value.stats[key])) protocolFailure(`difficulty stats.${key}`);
   }
+  requireOnlyKeys(value.stats, keys, "difficulty stats");
 }
 
 function validatePuzzleString(value: unknown, detail: string): asserts value is string {
@@ -332,6 +387,8 @@ function validateResponse(value: unknown, operation: CoreRequest["operation"]): 
         || typeof value.error.path !== "string" || !isRecord(value.error.params)) {
       protocolFailure("error envelope");
     }
+    requireOnlyKeys(value, ["schemaVersion", "operation", "ok", "error"], "error response");
+    requireOnlyKeys(value.error, ["code", "path", "params"], "error envelope");
     for (const parameter of Object.values(value.error.params)) {
       if (!(typeof parameter === "string" || isInteger(parameter, Number.MIN_SAFE_INTEGER))) {
         protocolFailure("error parameter");
@@ -342,14 +399,21 @@ function validateResponse(value: unknown, operation: CoreRequest["operation"]): 
 
   if (operation === "solve") {
     if (!isMember(classifications, value.result)
-        || !(value.solution === null || (typeof value.solution === "string" && /^[0-9]{81}$/.test(value.solution)))
-        || !isInteger(value.elapsedMicros)) protocolFailure("solve response");
-    validateDifficulty(value.difficulty);
-    if (value.steps !== undefined) {
-      if (!Array.isArray(value.steps)) protocolFailure("solve trace");
-      value.steps.forEach(validateTraceStep);
+        || !(value.solution === undefined
+          || (typeof value.solution === "string" && /^[0-9]{81}$/.test(value.solution)))
+        || !isInteger(value.elapsedMicroseconds) || !Array.isArray(value.steps)) {
+      protocolFailure("solve response");
     }
+    requireOnlyKeys(value, [
+      "schemaVersion", "operation", "ok", "result", "solution", "elapsedMicroseconds", "difficulty", "steps",
+    ], "solve response");
+    validateDifficulty(value.difficulty);
+    value.steps.forEach(validateTraceStep);
   } else if (operation === "generate") {
+    requireOnlyKeys(value, [
+      "schemaVersion", "operation", "ok", "puzzle", "solution", "difficulty", "givens",
+      "attempts", "seed", "report",
+    ], "generate response");
     validatePuzzleString(value.puzzle, "generated puzzle");
     validatePuzzleString(value.solution, "generated solution");
     if (!isMember(difficulties, value.difficulty) || !isInteger(value.givens, 0, 81)
@@ -358,11 +422,18 @@ function validateResponse(value: unknown, operation: CoreRequest["operation"]): 
     }
     validateDifficulty(value.report);
   } else if (operation === "hint") {
-    if (typeof value.available !== "boolean" || !(value.step === null || isRecord(value.step))) {
+    requireOnlyKeys(value, [
+      "schemaVersion", "operation", "ok", "available", "disclosure", "step",
+    ], "hint response");
+    if (typeof value.available !== "boolean" || !isMember(hintLevels, value.disclosure)
+        || !(value.step === null || isRecord(value.step))) {
       protocolFailure("hint response");
     }
     if (value.step !== null) validateTraceStep(value.step);
   } else {
+    requireOnlyKeys(value, [
+      "schemaVersion", "operation", "ok", "result", "difficulty",
+    ], "analyze response");
     if (!isMember(classifications, value.result)) protocolFailure("analyze response");
     validateDifficulty(value.difficulty);
   }
@@ -397,6 +468,9 @@ export class CoreClient {
   }
 
   async solve(options: SolveOptions): Promise<SolveResponse> {
+    if (!isRecord(options) || !hasOnlyKeys(options, ["puzzle", "mode", "includeTrace"])) {
+      throw new CoreProtocolError("Invalid solve request fields", "unknown_field");
+    }
     const mode = options.mode ?? "smart";
     if (!isMember(modes, mode)) throw new CoreProtocolError("Invalid solver mode", "invalid_value", "$.mode");
     if (options.includeTrace !== undefined && typeof options.includeTrace !== "boolean") {
@@ -412,6 +486,9 @@ export class CoreClient {
   }
 
   async generate(options: GenerateOptions): Promise<GenerateResponse> {
+    if (!isRecord(options) || !hasOnlyKeys(options, ["difficulty", "seed"])) {
+      throw new CoreProtocolError("Invalid generate request fields", "unknown_field");
+    }
     if (!isMember(difficulties, options.difficulty)) {
       throw new CoreProtocolError("Invalid difficulty", "invalid_value", "$.difficulty");
     }
@@ -428,6 +505,9 @@ export class CoreClient {
   }
 
   async hint(options: HintOptions): Promise<HintResponse> {
+    if (!isRecord(options) || !hasOnlyKeys(options, ["puzzle", "level"])) {
+      throw new CoreProtocolError("Invalid hint request fields", "unknown_field");
+    }
     const level = options.level ?? "gentle";
     if (!isMember(hintLevels, level)) throw new CoreProtocolError("Invalid hint level", "invalid_value", "$.level");
     return await dispatch<HintResponse>(this.#dispatcher, {
@@ -439,6 +519,9 @@ export class CoreClient {
   }
 
   async analyze(options: AnalyzeOptions): Promise<AnalyzeResponse> {
+    if (!isRecord(options) || !hasOnlyKeys(options, ["puzzle", "mode"])) {
+      throw new CoreProtocolError("Invalid analyze request fields", "unknown_field");
+    }
     const mode = options.mode ?? "smart";
     if (!isMember(modes, mode)) throw new CoreProtocolError("Invalid solver mode", "invalid_value", "$.mode");
     return await dispatch<AnalyzeResponse>(this.#dispatcher, {

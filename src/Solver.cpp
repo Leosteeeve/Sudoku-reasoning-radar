@@ -717,7 +717,7 @@ bool Solver::placeWithRecording(Board& board,
                     << " in the related row, column, or box.";
                 recorder.addStep(StepType::CandidateRemovedByLogic, r, c, number, row, col, -1, -1,
                                  unitType, unitIndex, before[r][c], board.getCandidates(r, c),
-                                 removed & bit, depth, out.str());
+                                 removed & bit, depth, out.str(), technique);
             }
         }
     }
@@ -758,13 +758,13 @@ bool Solver::removeCandidatesWithRecording(Board& board,
                      after,
                      removed,
                      depth,
-                     reason);
+                     reason,
+                     source);
     if (after == 0) {
         std::ostringstream out;
         out << "Contradiction after " << maskName(removed) << " was removed from " << cellName(row, col) << ".";
         recordContradiction(row, col, 0, depth, out.str());
     }
-    (void)source;
     return true;
 }
 

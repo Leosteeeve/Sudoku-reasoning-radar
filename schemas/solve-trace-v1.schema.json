@@ -16,8 +16,8 @@
     },
     "technique": {
       "enum": [
-        "naked-single", "hidden-single", "locked-candidate", "box-line-reduction",
-        "naked-pair", "hidden-pair", "x-wing", null
+        "naked_single", "hidden_single", "locked_candidate", "box_line_reduction",
+        "naked_pair", "hidden_pair", "x_wing", "mrv_guess", "exact_cover", null
       ]
     },
     "traceStep": {
@@ -25,13 +25,13 @@
       "additionalProperties": false,
       "required": [
         "id", "technique", "action", "targets", "candidateDeltas", "evidence",
-        "branch", "explanationKey", "params"
+        "branch", "explanationKey", "explanationParams"
       ],
       "properties": {
         "id": { "type": "string", "pattern": "^step-[0-9]{6}$" },
         "technique": { "$ref": "#/$defs/technique" },
         "action": {
-          "enum": ["observe", "eliminate", "place", "inform", "branch", "contradict", "revert", "complete"]
+          "enum": ["analyze", "place", "eliminate", "guess", "contradiction", "backtrack", "complete"]
         },
         "targets": { "type": "array", "items": { "$ref": "#/$defs/cell" } },
         "candidateDeltas": {
@@ -39,12 +39,16 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["cell", "beforeMask", "afterMask", "removedMask"],
+            "required": ["cell", "beforeMask", "afterMask", "removedDigits"],
             "properties": {
               "cell": { "$ref": "#/$defs/cell" },
               "beforeMask": { "type": "integer", "minimum": 0, "maximum": 511 },
               "afterMask": { "type": "integer", "minimum": 0, "maximum": 511 },
-              "removedMask": { "type": "integer", "minimum": 0, "maximum": 511 }
+              "removedDigits": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": { "type": "integer", "minimum": 1, "maximum": 9 }
+              }
             }
           }
         },
@@ -57,14 +61,22 @@
               "type": "array",
               "items": {
                 "type": "object",
+                "additionalProperties": false,
                 "required": ["id", "kind"],
                 "properties": {
-                  "id": { "type": "string" },
-                  "kind": { "type": "string" },
-                  "row": { "type": "integer", "minimum": 0, "maximum": 8 },
-                  "col": { "type": "integer", "minimum": 0, "maximum": 8 },
-                  "value": { "type": "integer", "minimum": 1, "maximum": 9 },
-                  "mask": { "type": "integer", "minimum": 0, "maximum": 511 }
+                  "id": { "type": "string", "pattern": "^step-[0-9]{6}(?:-(?:cell-[1-9][0-9]*|candidate|unit|result))?$" },
+                  "kind": { "enum": ["cell", "candidate", "unit", "branch"] },
+                  "cell": { "$ref": "#/$defs/cell" },
+                  "digit": { "type": "integer", "minimum": 1, "maximum": 9 },
+                  "unit": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": ["kind", "index"],
+                    "properties": {
+                      "kind": { "enum": ["row", "column", "box"] },
+                      "index": { "type": "integer", "minimum": 0, "maximum": 8 }
+                    }
+                  }
                 }
               }
             },
@@ -77,7 +89,7 @@
                 "properties": {
                   "from": { "type": "string" },
                   "to": { "type": "string" },
-                  "relation": { "enum": ["supports", "excludes", "conflicts", "branches", "reverts"] }
+                  "relation": { "enum": ["supports", "excludes", "conflicts", "branches_to", "reverts"] }
                 }
               }
             }
@@ -86,14 +98,14 @@
         "branch": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["depth", "parentId"],
+          "required": ["depth"],
           "properties": {
             "depth": { "type": "integer", "minimum": 0 },
-            "parentId": { "type": ["string", "null"] }
+            "parentStepId": { "type": "string", "pattern": "^step-[0-9]{6}$" }
           }
         },
-        "explanationKey": { "type": "string", "pattern": "^trace\\." },
-        "params": {
+        "explanationKey": { "type": "string", "pattern": "^(?:trace|hint)\\.[A-Za-z][A-Za-z0-9]*$" },
+        "explanationParams": {
           "type": "object",
           "additionalProperties": { "type": ["integer", "string"] }
         }

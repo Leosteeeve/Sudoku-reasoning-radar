@@ -53,6 +53,7 @@ enum class StepType {
 
 struct SolveStep {
     StepType type;
+    StepType sourceTechnique = StepType::CandidateRemovedByLogic;
     int row = -1;
     int col = -1;
     int number = 0;
@@ -93,7 +94,8 @@ public:
                  int maskAfter,
                  int removedMask,
                  int depth,
-                 const std::string& reason);
+                 const std::string& reason,
+                 StepType sourceTechnique = StepType::CandidateRemovedByLogic);
     void addStep(const SolveStep& step);
     void clear();
     const std::vector<SolveStep>& getSteps() const;

@@ -6,6 +6,9 @@ import {
   CoreProtocolError,
   type CoreRequest,
   type CoreResponse,
+  type SolveRequestV1,
+  type SolveResponseV1,
+  type SolveStepV1,
 } from "../src/index.ts";
 
 const canonicalPuzzle =
@@ -17,7 +20,7 @@ const difficulty = {
   givens: 30,
   emptyCells: 51,
   maxBranchDepth: 0,
-  hardestTechnique: "hidden-single",
+  hardestTechnique: "hidden_single",
   stats: {
     nakedSingles: 2,
     hiddenSingles: 1,
@@ -35,29 +38,29 @@ const difficulty = {
 
 const traceStep = {
   id: "step-000001",
-  technique: "locked-candidate",
+  technique: "locked_candidate",
   action: "eliminate",
   targets: [{ row: 2, col: 3 }],
   candidateDeltas: [
-    { cell: { row: 2, col: 3 }, beforeMask: 448, afterMask: 192, removedMask: 256 },
+    { cell: { row: 2, col: 3 }, beforeMask: 448, afterMask: 192, removedDigits: [9] },
   ],
   evidence: {
     nodes: [
-      { id: "step-000001-action", kind: "step" },
-      { id: "step-000001-cell-1", kind: "cell", row: 2, col: 3, value: 7 },
+      { id: "step-000001", kind: "branch" },
+      { id: "step-000001-cell-1", kind: "cell", cell: { row: 2, col: 3 }, digit: 7 },
     ],
     edges: [
       {
-        from: "step-000001-action",
+        from: "step-000001",
         to: "step-000001-cell-1",
         relation: "excludes",
       },
     ],
   },
-  branch: { depth: 1, parentId: "step-000000" },
+  branch: { depth: 1, parentStepId: "step-000000" },
   explanationKey: "trace.candidateRemovedByLogic",
-  params: { number: 7, unit: "row" },
-} as const;
+  explanationParams: { number: 7, unit: "row" },
+} as const satisfies SolveStepV1;
 
 function solveResponse(overrides: Record<string, unknown> = {}): CoreResponse {
   return {
@@ -67,7 +70,7 @@ function solveResponse(overrides: Record<string, unknown> = {}): CoreResponse {
     result: "unique",
     solution:
       "534678912672195348198342567859761423426853791713924856961537284287419635345286179",
-    elapsedMicros: 42,
+    elapsedMicroseconds: 42,
     difficulty,
     steps: [traceStep],
     ...overrides,
@@ -75,6 +78,15 @@ function solveResponse(overrides: Record<string, unknown> = {}): CoreResponse {
 }
 
 test("CoreClient exposes exactly the four approved public methods", () => {
+  const requestContract: SolveRequestV1 = {
+    schemaVersion: 1,
+    puzzle: canonicalPuzzle,
+    mode: "human",
+    includeTrace: true,
+  };
+  const responseContract: SolveResponseV1 = solveResponse() as SolveResponseV1;
+  assert.equal(requestContract.mode, "human");
+  assert.equal(responseContract.elapsedMicroseconds, 42);
   assert.deepEqual(
     Object.getOwnPropertyNames(CoreClient.prototype).filter((name) => name !== "constructor").sort(),
     ["analyze", "generate", "hint", "solve"],
@@ -105,7 +117,7 @@ test("all four methods send their matching versioned operation", async () => {
   const client = new CoreClient((json) => {
     const request = JSON.parse(json) as CoreRequest;
     operations.push(request.operation);
-    if (request.operation === "solve") return JSON.stringify(solveResponse({ steps: undefined }));
+    if (request.operation === "solve") return JSON.stringify(solveResponse({ steps: [] }));
     if (request.operation === "generate") {
       return JSON.stringify({
         schemaVersion: 1,
@@ -126,6 +138,7 @@ test("all four methods send their matching versioned operation", async () => {
         operation: "hint",
         ok: true,
         available: true,
+        disclosure: "direct",
         step: traceStep,
       });
     }
@@ -141,7 +154,7 @@ test("all four methods send their matching versioned operation", async () => {
   await client.solve({ puzzle: canonicalPuzzle, includeTrace: false });
   await client.generate({ difficulty: "easy", seed: 7 });
   await client.hint({ puzzle: canonicalPuzzle, level: "direct" });
-  await client.analyze({ puzzle: canonicalPuzzle, mode: "human-logic" });
+  await client.analyze({ puzzle: canonicalPuzzle, mode: "human" });
   assert.deepEqual(operations, ["solve", "generate", "hint", "analyze"]);
 });
 
@@ -164,10 +177,10 @@ test("accepts a representative language-neutral SolveTrace response", async () =
   const client = new CoreClient(() => JSON.stringify(solveResponse()));
   const response = await client.solve({ puzzle: canonicalPuzzle });
 
-  assert.equal(response.steps?.[0]?.technique, "locked-candidate");
-  assert.equal(response.steps?.[0]?.candidateDeltas[0]?.removedMask, 256);
+  assert.equal(response.steps?.[0]?.technique, "locked_candidate");
+  assert.deepEqual(response.steps?.[0]?.candidateDeltas[0]?.removedDigits, [9]);
   assert.equal(response.steps?.[0]?.evidence.edges[0]?.relation, "excludes");
-  assert.equal(response.steps?.[0]?.branch.parentId, "step-000000");
+  assert.equal(response.steps?.[0]?.branch.parentStepId, "step-000000");
 });
 
 test("rejects malformed transport JSON and schema mismatches", async () => {
@@ -185,4 +198,32 @@ test("rejects structurally invalid successful responses", async () => {
     JSON.stringify(solveResponse({ steps: [{ ...traceStep, action: "translate-prose" }] })),
   );
   await assert.rejects(invalidTrace.solve({ puzzle: canonicalPuzzle }), /response/i);
+
+  const unknownResponseField = new CoreClient(() =>
+    JSON.stringify(solveResponse({ surprise: true })),
+  );
+  await assert.rejects(unknownResponseField.solve({ puzzle: canonicalPuzzle }), /response/i);
+
+  const invalidEvidenceKind = new CoreClient(() => JSON.stringify(solveResponse({
+    steps: [{
+      ...traceStep,
+      evidence: {
+        ...traceStep.evidence,
+        nodes: [{ id: "not-a-stable-id", kind: "paragraph" }],
+      },
+    }],
+  })));
+  await assert.rejects(invalidEvidenceKind.solve({ puzzle: canonicalPuzzle }), /response/i);
+
+  const missingHintDisclosure = new CoreClient(() => JSON.stringify({
+    schemaVersion: 1,
+    operation: "hint",
+    ok: true,
+    available: false,
+    step: null,
+  }));
+  await assert.rejects(
+    missingHintDisclosure.hint({ puzzle: canonicalPuzzle, level: "gentle" }),
+    /response/i,
+  );
 });

@@ -18,16 +18,17 @@ enum class TechniqueId {
     NakedPair,
     HiddenPair,
     XWing,
+    MrvGuess,
+    ExactCover,
 };
 
 enum class TraceAction {
-    Observe,
-    Eliminate,
+    Analyze,
     Place,
-    Inform,
-    Branch,
-    Contradict,
-    Revert,
+    Eliminate,
+    Guess,
+    Contradiction,
+    Backtrack,
     Complete,
 };
 
@@ -40,23 +41,27 @@ struct CandidateDelta {
     TraceTarget cell;
     int beforeMask = 0;
     int afterMask = 0;
-    int removedMask = 0;
+    std::vector<int> removedDigits;
+};
+
+struct EvidenceUnit {
+    std::string kind;
+    int index = -1;
 };
 
 struct EvidenceNode {
     std::string id;
     std::string kind;
-    int row = -1;
-    int col = -1;
-    int value = 0;
-    int mask = 0;
+    std::optional<TraceTarget> cell;
+    std::optional<int> digit;
+    std::optional<EvidenceUnit> unit;
 };
 
 enum class EvidenceRelation {
     Supports,
     Excludes,
     Conflicts,
-    Branches,
+    BranchesTo,
     Reverts,
 };
 
@@ -73,7 +78,7 @@ struct EvidenceGraph {
 
 struct BranchMetadata {
     int depth = 0;
-    std::optional<std::string> parentId;
+    std::optional<std::string> parentStepId;
 };
 
 using TraceParameter = std::variant<int, std::string>;
@@ -81,13 +86,13 @@ using TraceParameter = std::variant<int, std::string>;
 struct TraceStep {
     std::string id;
     std::optional<TechniqueId> technique;
-    TraceAction action = TraceAction::Observe;
+    TraceAction action = TraceAction::Analyze;
     std::vector<TraceTarget> targets;
     std::vector<CandidateDelta> candidateDeltas;
     EvidenceGraph evidence;
     BranchMetadata branch;
     std::string explanationKey;
-    std::map<std::string, TraceParameter> params;
+    std::map<std::string, TraceParameter> explanationParams;
 };
 
 std::vector<TraceStep> adaptLegacySteps(const std::vector<SolveStep>& steps);

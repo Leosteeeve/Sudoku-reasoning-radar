@@ -69,6 +69,7 @@ GeneratedPuzzle PuzzleGenerator::generateWithSeed(PuzzleDifficulty difficulty, c
     const SolveResult result = solver.solveUniqueOrMultiple(generated.puzzle, SolverMode::Smart);
     DifficultyAnalyzer analyzer;
     generated.report = analyzer.analyze(generated.puzzle, result, solver.getSteps());
+    generated.analysisSteps = solver.getSteps();
 
     const auto ended = std::chrono::steady_clock::now();
     generated.generateTimeMs = static_cast<int>(

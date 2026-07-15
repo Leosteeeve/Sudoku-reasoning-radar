@@ -24,6 +24,7 @@ struct GeneratedPuzzle {
     bool unique = false;
     std::string seed;
     DifficultyReport report;
+    std::vector<SolveStep> analysisSteps;
 };
 
 class PuzzleGenerator {

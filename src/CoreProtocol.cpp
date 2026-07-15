@@ -7,6 +7,7 @@
 #include "Solver.h"
 
 #include <chrono>
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
@@ -264,6 +265,15 @@ const JsonValue* field(const JsonValue& root, const std::string& name) {
     return it == root.object.end() ? nullptr : &it->second;
 }
 
+std::optional<std::string> unknownField(const JsonValue& root,
+                                        const std::vector<std::string>& allowed) {
+    for (const auto& [name, value] : root.object) {
+        (void)value;
+        if (std::find(allowed.begin(), allowed.end(), name) == allowed.end()) return name;
+    }
+    return std::nullopt;
+}
+
 bool integer(const JsonValue& value, std::int64_t& result) {
     if (value.kind != JsonValue::Kind::Number || std::floor(value.number) != value.number
         || value.number < static_cast<double>(std::numeric_limits<std::int64_t>::min())
@@ -306,6 +316,8 @@ int techniqueWeight(StepType type) {
     case StepType::NakedPair:
     case StepType::HiddenPair: return 6;
     case StepType::XWing: return 10;
+    case StepType::Guess: return 18;
+    case StepType::TurboSolved: return 20;
     default: return 0;
     }
 }
@@ -390,7 +402,7 @@ bool parseMode(const JsonValue& root,
         failure = errorResponse(operation, "wrong_type", "$.mode");
         return false;
     }
-    if (value->string == "human-logic") mode = SolverMode::HumanLogic;
+    if (value->string == "human") mode = SolverMode::HumanLogic;
     else if (value->string == "smart") mode = SolverMode::Smart;
     else if (value->string == "turbo") mode = SolverMode::Turbo;
     else {
@@ -425,15 +437,14 @@ std::string solveOperation(const JsonValue& root, const std::optional<std::strin
 
     std::ostringstream out;
     out << "{\"schemaVersion\":1,\"operation\":\"solve\",\"ok\":true,\"result\":"
-        << jsonString(resultName(result)) << ",\"solution\":";
+        << jsonString(resultName(result));
     if (result == SolveResult::SolvedUnique || result == SolveResult::MultipleSolutions) {
-        out << jsonString(PuzzleString::serialize(solver.getFinalBoard()));
-    } else {
-        out << "null";
+        out << ",\"solution\":" << jsonString(PuzzleString::serialize(solver.getFinalBoard()));
     }
-    out << ",\"elapsedMicros\":" << elapsed
-        << ",\"difficulty\":" << serializeDifficulty(report, solver.getSteps());
-    if (includeTrace) out << ",\"steps\":" << serializeTrace(adaptLegacySteps(solver.getSteps()));
+    out << ",\"elapsedMicroseconds\":" << elapsed
+        << ",\"difficulty\":" << serializeDifficulty(report, solver.getSteps())
+        << ",\"steps\":"
+        << (includeTrace ? serializeTrace(adaptLegacySteps(solver.getSteps())) : "[]");
     out << '}';
     return out.str();
 }
@@ -500,7 +511,7 @@ std::string generateOperation(const JsonValue& root, const std::optional<std::st
         << ",\"givens\":" << generated.givens
         << ",\"attempts\":" << generated.attempts
         << ",\"seed\":" << responseSeed
-        << ",\"report\":" << serializeDifficulty(generated.report, {}) << '}';
+        << ",\"report\":" << serializeDifficulty(generated.report, generated.analysisSteps) << '}';
     return out.str();
 }
 
@@ -530,9 +541,23 @@ std::string hintOperation(const JsonValue& root, const std::optional<std::string
     }
     std::ostringstream out;
     out << "{\"schemaVersion\":1,\"operation\":\"hint\",\"ok\":true,\"available\":"
-        << (selected ? "true" : "false") << ",\"step\":";
+        << (selected ? "true" : "false") << ",\"disclosure\":" << jsonString(levelName)
+        << ",\"step\":";
     if (selected) {
-        const std::string trace = serializeTrace(adaptLegacySteps({*selected}));
+        TraceStep hintStep = adaptLegacySteps({*selected}).front();
+        if (levelName != "direct") {
+            hintStep.action = TraceAction::Analyze;
+            hintStep.candidateDeltas.clear();
+            hintStep.explanationParams.erase("number");
+            for (EvidenceNode& node : hintStep.evidence.nodes) node.digit.reset();
+            if (levelName == "gentle") {
+                hintStep.technique.reset();
+                hintStep.explanationKey = "hint.gentle";
+            } else {
+                hintStep.explanationKey = "hint.technique";
+            }
+        }
+        const std::string trace = serializeTrace({hintStep});
         out << trace.substr(1, trace.size() - 2);
     } else {
         out << "null";
@@ -588,6 +613,14 @@ std::string dispatchJson(const std::string& requestJson) {
         return errorResponse(std::nullopt, "wrong_type", "$.operation");
     }
     const std::optional<std::string> operation = operationValue->string;
+    std::vector<std::string> allowed = {"schemaVersion", "operation"};
+    if (*operation == "solve") allowed.insert(allowed.end(), {"puzzle", "mode", "includeTrace"});
+    else if (*operation == "generate") allowed.insert(allowed.end(), {"difficulty", "seed"});
+    else if (*operation == "hint") allowed.insert(allowed.end(), {"puzzle", "level"});
+    else if (*operation == "analyze") allowed.insert(allowed.end(), {"puzzle", "mode"});
+    if (const auto unknown = unknownField(root, allowed)) {
+        return errorResponse(operation, "unknown_field", "$." + *unknown);
+    }
     if (*operation == "solve") return solveOperation(root, operation);
     if (*operation == "generate") return generateOperation(root, operation);
     if (*operation == "hint") return hintOperation(root, operation);

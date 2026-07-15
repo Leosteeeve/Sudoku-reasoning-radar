@@ -11,14 +11,28 @@
 #define SRR_EXPORT
 #endif
 
-extern "C" SRR_EXPORT char* srr_dispatch(const char* request_json) {
-    const std::string response = srr::v1::dispatchJson(request_json ? request_json : "");
-    char* result = static_cast<char*>(std::malloc(response.size() + 1));
+namespace {
+char* copyResponse(const char* data, std::size_t size) noexcept {
+    char* result = static_cast<char*>(std::malloc(size + 1));
     if (!result) return nullptr;
-    std::memcpy(result, response.c_str(), response.size() + 1);
+    std::memcpy(result, data, size);
+    result[size] = '\0';
     return result;
 }
+}
 
-extern "C" SRR_EXPORT void srr_free(char* response_json) {
+extern "C" SRR_EXPORT char* srr_dispatch(const char* request_json) noexcept {
+    try {
+        const std::string response = srr::v1::dispatchJson(request_json ? request_json : "");
+        return copyResponse(response.data(), response.size());
+    } catch (...) {
+        constexpr const char fallback[] =
+            "{\"schemaVersion\":1,\"operation\":null,\"ok\":false,"
+            "\"error\":{\"code\":\"internal_error\",\"path\":\"$\",\"params\":{}}}";
+        return copyResponse(fallback, sizeof(fallback) - 1);
+    }
+}
+
+extern "C" SRR_EXPORT void srr_free(char* response_json) noexcept {
     std::free(response_json);
 }

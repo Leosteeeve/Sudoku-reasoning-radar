@@ -39,9 +39,11 @@ void StepRecorder::addStep(StepType type,
                            int maskAfter,
                            int removedMask,
                            int depth,
-                           const std::string& reason) {
+                           const std::string& reason,
+                           StepType sourceTechnique) {
     SolveStep step;
     step.type = type;
+    step.sourceTechnique = type == StepType::CandidateRemovedByLogic ? sourceTechnique : type;
     step.row = row;
     step.col = col;
     step.number = number;

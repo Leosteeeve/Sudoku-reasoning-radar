@@ -10,6 +10,8 @@
 #include <vector>
 
 namespace {
+static_assert(noexcept(srr_dispatch(nullptr)), "C ABI dispatcher must not leak exceptions");
+static_assert(noexcept(srr_free(nullptr)), "C ABI free must not leak exceptions");
 constexpr const char* CanonicalPuzzle =
     "530070000600195000098000060800060003400803001700020006060000280000419005000080079";
 constexpr const char* InitialDuplicatePuzzle =
@@ -68,6 +70,10 @@ void validatesVersionOperationModesTypesAndRanges() {
     expectContains(request("\"operation\":\"generate\",\"difficulty\":\"easy\",\"seed\":-1"),
                    "\"code\":\"out_of_range\"",
                    "out-of-range seed was accepted");
+    expectContains(request("\"operation\":\"solve\",\"puzzle\":\"" +
+                           std::string(CanonicalPuzzle) + "\",\"surprise\":true"),
+                   "\"code\":\"unknown_field\"",
+                   "unknown request field was accepted");
 }
 
 void classifiesAllSolveResultsAndCanExcludeTrace() {
@@ -80,8 +86,8 @@ void classifiesAllSolveResultsAndCanExcludeTrace() {
     const std::string unique = solve(CanonicalPuzzle, false);
     expectContains(unique, "\"result\":\"unique\"", "unique puzzle classification changed");
     expectContains(unique, "\"solution\":\"534678912", "unique solution is missing");
-    expectContains(unique, "\"elapsedMicros\":", "solve timing is missing");
-    expectNotContains(unique, "\"steps\":", "includeTrace=false still emitted steps");
+    expectContains(unique, "\"elapsedMicroseconds\":", "solve timing is missing");
+    expectContains(unique, "\"steps\":[]", "includeTrace=false must emit an empty trace array");
     expectContains(solve(InitialDuplicatePuzzle, true), "\"result\":\"invalid\"",
                    "invalid puzzle classification changed");
     expectContains(solve(UnsolvablePuzzle, true), "\"result\":\"unsolvable\"",
@@ -115,12 +121,13 @@ void mapsLegacyStepsToStableLanguageNeutralTrace() {
     const std::string first = srr::v1::serializeTrace(mapped);
     const std::string second = srr::v1::serializeTrace(srr::v1::adaptLegacySteps({placement}));
     expect(first == second, "trace JSON is not stable");
-    expectContains(first, "\"params\":{\"number\":5}", "numeric localization param missing");
+    expectContains(first, "\"explanationParams\":{\"number\":5}", "numeric localization param missing");
     expectNotContains(first, "legacy English", "legacy prose leaked into v1 JSON");
 }
 
 void mapsCandidateEvidenceAndBranchSemantics() {
     SolveStep elimination = step(StepType::CandidateRemovedByLogic, 2, 3, 7, 1);
+    elimination.sourceTechnique = StepType::LockedCandidate;
     elimination.relatedRow = 2;
     elimination.relatedCol = 0;
     elimination.maskBefore = 0x1c0;
@@ -134,17 +141,25 @@ void mapsCandidateEvidenceAndBranchSemantics() {
     const std::vector<srr::v1::TraceStep> mapped =
         srr::v1::adaptLegacySteps({guess, elimination, contradiction, backtrack, complete});
     const std::string json = srr::v1::serializeTrace(mapped);
-    expectContains(json, "\"action\":\"branch\"", "guess did not map to branch");
+    expectContains(json, "\"technique\":\"mrv_guess\",\"action\":\"guess\"",
+                   "guess did not map to mrv_guess/guess");
     expectContains(json, "\"action\":\"eliminate\"", "candidate removal did not map to elimination");
-    expectContains(json, "\"beforeMask\":448,\"afterMask\":192,\"removedMask\":256",
+    expectContains(json, "\"technique\":\"locked_candidate\",\"action\":\"eliminate\"",
+                   "candidate removal lost its source technique");
+    expectContains(json, "\"beforeMask\":448,\"afterMask\":192,\"removedDigits\":[9]",
                    "candidate masks/removals were not preserved");
     expectContains(json, "\"relation\":\"supports\"", "support evidence missing");
     expectContains(json, "\"relation\":\"excludes\"", "exclusion evidence missing");
     expectContains(json, "\"relation\":\"conflicts\"", "conflict evidence missing");
-    expectContains(json, "\"relation\":\"branches\"", "branch evidence missing");
+    expectContains(json, "\"relation\":\"branches_to\"", "branch evidence missing");
     expectContains(json, "\"relation\":\"reverts\"", "revert evidence missing");
-    expectContains(json, "\"depth\":1,\"parentId\":\"step-000001\"",
+    expectContains(json,
+                   "\"from\":\"step-000001\",\"to\":\"step-000004\",\"relation\":\"reverts\"",
+                   "revert edge does not connect the reverted branch to the backtrack step");
+    expectContains(json, "\"depth\":1,\"parentStepId\":\"step-000001\"",
                    "branch depth/parent IDs were not preserved");
+    expectNotContains(json, "\"kind\":\"step\"", "unsupported evidence node kind leaked");
+    expectNotContains(json, "\"kind\":\"outcome\"", "unsupported evidence node kind leaked");
 }
 
 void mapsEveryLegacyStepType() {
@@ -166,6 +181,10 @@ void mapsEveryLegacyStepType() {
     for (const auto& value : mapped) {
         expect(!value.explanationKey.empty(), "legacy StepType has no explanation key");
     }
+    expect(mapped[11].technique == srr::v1::TechniqueId::MrvGuess,
+           "Guess did not map to mrv_guess");
+    expect(mapped[19].technique == srr::v1::TechniqueId::ExactCover,
+           "TurboSolved did not map to exact_cover");
 }
 
 void generateHintAndAnalyzeHaveVersionedSuccessResponses() {
@@ -175,14 +194,25 @@ void generateHintAndAnalyzeHaveVersionedSuccessResponses() {
                    "generate did not return success");
     expectContains(generated, "\"seed\":12345", "generate did not preserve the seed");
     expectContains(generated, "\"puzzle\":\"", "generate omitted the puzzle");
+    expectNotContains(generated, "\"hardestTechnique\":null",
+                      "generate discarded the analysis trace for hardest technique");
     expect(generated == request(
         "\"operation\":\"generate\",\"difficulty\":\"easy\",\"seed\":12345"),
         "seeded generate response is not deterministic");
 
+    const std::string gentleHint = request("\"operation\":\"hint\",\"puzzle\":\""
+        + std::string(CanonicalPuzzle) + "\",\"level\":\"gentle\"");
+    const std::string techniqueHint = request("\"operation\":\"hint\",\"puzzle\":\""
+        + std::string(CanonicalPuzzle) + "\",\"level\":\"technique\"");
     const std::string hint = request("\"operation\":\"hint\",\"puzzle\":\""
         + std::string(CanonicalPuzzle) + "\",\"level\":\"direct\"");
     expectContains(hint, "\"operation\":\"hint\",\"ok\":true", "hint did not return success");
     expectContains(hint, "\"available\":true", "hint did not return an available move");
+    expectContains(gentleHint, "\"disclosure\":\"gentle\"", "gentle hint disclosure missing");
+    expectContains(techniqueHint, "\"disclosure\":\"technique\"", "technique hint disclosure missing");
+    expectContains(hint, "\"disclosure\":\"direct\"", "direct hint disclosure missing");
+    expect(gentleHint != techniqueHint && techniqueHint != hint,
+           "hint levels did not produce distinct language-neutral responses");
     expectNotContains(hint, "Focus around", "legacy hint prose leaked into v1 JSON");
 
     const std::string analyze = request("\"operation\":\"analyze\",\"puzzle\":\""
