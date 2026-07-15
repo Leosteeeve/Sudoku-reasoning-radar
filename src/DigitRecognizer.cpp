@@ -875,7 +875,6 @@ std::string DigitRecognizer::findTessdataPath() {
     addTessdataCandidate(candidates, executableDirectory());
     addTessdataCandidate(candidates, std::filesystem::current_path());
     addTessdataCandidate(candidates, std::filesystem::path("tessdata"));
-    addTessdataCandidate(candidates, std::filesystem::path("D:/MSYS2/ucrt64/share/tessdata"));
     if (env && *env) {
         addTessdataCandidate(candidates, std::filesystem::path(env));
     }

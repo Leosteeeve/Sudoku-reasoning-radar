@@ -1,8 +1,12 @@
-import { cp, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
+import { execFile } from "node:child_process";
+import { cp, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 
 const repositoryRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+const execFileAsync = promisify(execFile);
 
 async function requireFile(filePath, label) {
   try {
@@ -12,7 +16,36 @@ async function requireFile(filePath, label) {
   }
 }
 
-export async function stageOcrRuntime({ helperPath, tessdataDir, outputDir, dllDirs = [] }) {
+export async function scanRuntimeDependencies({ helperPath, dllDirs = [] }) {
+  const temporary = await mkdtemp(path.join(os.tmpdir(), "srr-ocr-dependencies-"));
+  const outputPath = path.join(temporary, "resolved-dependencies.txt");
+  try {
+    await execFileAsync("cmake", [
+      `-DSRR_HELPER=${helperPath}`,
+      `-DSRR_OUTPUT=${outputPath}`,
+      `-DSRR_SEARCH_DIRS=${dllDirs.join(";")}`,
+      "-P",
+      path.join(repositoryRoot, "scripts", "scan-ocr-runtime-dependencies.cmake"),
+    ]);
+    const contents = await readFile(outputPath, "utf8");
+    return contents.split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+  } catch (error) {
+    const detail = error && typeof error === "object" && "stderr" in error
+      ? String(error.stderr).trim()
+      : error instanceof Error ? error.message : String(error);
+    throw new Error(`Unable to resolve every OCR runtime dependency: ${detail}`);
+  } finally {
+    await rm(temporary, { recursive: true, force: true });
+  }
+}
+
+export async function stageOcrRuntime({
+  helperPath,
+  tessdataDir,
+  outputDir,
+  dllDirs = [],
+  resolveRuntimeDependencies = scanRuntimeDependencies,
+}) {
   await requireFile(helperPath, "OCR helper");
   const helperDir = path.dirname(helperPath);
   const capabilityPath = path.join(helperDir, "srr-ocr-capabilities.json");
@@ -25,18 +58,12 @@ export async function stageOcrRuntime({ helperPath, tessdataDir, outputDir, dllD
   if (!tessdataDir) throw new Error("SRR_TESSDATA_DIR must point to a tessdata directory containing eng.traineddata");
   await requireFile(path.join(tessdataDir, "eng.traineddata"), "tessdata/eng.traineddata");
 
+  const dependencies = await resolveRuntimeDependencies({ helperPath, dllDirs: [helperDir, ...dllDirs] });
   const discovered = new Map();
-  for (const directory of [helperDir, ...dllDirs]) {
-    let entries;
-    try { entries = await readdir(directory, { withFileTypes: true }); } catch { continue; }
-    for (const entry of entries) {
-      if (entry.isFile() && path.extname(entry.name).toLowerCase() === ".dll" && !discovered.has(entry.name.toLowerCase())) {
-        discovered.set(entry.name.toLowerCase(), path.join(directory, entry.name));
-      }
-    }
-  }
-  if (discovered.size === 0) {
-    throw new Error("No OCR runtime DLLs were discovered; set SRR_OCR_DLL_DIRS to the OpenCV/Tesseract runtime directories");
+  for (const dependency of dependencies) {
+    await requireFile(dependency, `OCR runtime dependency ${path.basename(dependency)}`);
+    const name = path.basename(dependency);
+    discovered.set(name.toLowerCase(), dependency);
   }
 
   await rm(outputDir, { recursive: true, force: true });
