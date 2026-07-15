@@ -74,7 +74,7 @@ target when `EMSDK` is active.
 
 ## Application commands
 
-The workspace reserves these commands for later v1 tasks:
+The v1 applications are available through the root workspace commands:
 
 ```sh
 pnpm run dev:web
@@ -83,8 +83,12 @@ pnpm run build
 pnpm run package:windows
 ```
 
-Until their applications exist, each command prints a not-yet-available message
-and exits nonzero.
+`dev:web` starts the Vite Web renderer. `dev:desktop` builds the workspace and
+starts Electron. `build` compiles the shared packages, WASM core when Emscripten
+is active, renderer, and desktop shell. `package:windows` additionally builds
+and stages the fail-closed OCR runtime before producing NSIS and portable
+artifacts. CI transfers the already verified Web renderer into the Windows job
+and compares its WASM files with Electron's packaged resources.
 
 ## Legacy compatibility builds
 

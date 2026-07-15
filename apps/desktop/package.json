@@ -24,6 +24,7 @@
   "build": {
     "appId": "com.sudokureasoningradar.desktop",
     "productName": "Sudoku Reasoning Radar",
+    "directories": { "output": "release" },
     "asar": true,
     "files": ["dist/**", "package.json"],
     "extraResources": [

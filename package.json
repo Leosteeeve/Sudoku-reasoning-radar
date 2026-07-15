@@ -19,7 +19,7 @@
     "test:wasm-artifact": "node --test scripts/wasm-artifact.test.mjs",
     "test:e2e": "playwright test",
     "test:e2e:list": "playwright test --list",
-    "verify:wasm-parity": "node scripts/verify-wasm-parity.mjs apps/renderer/dist out/desktop-renderer",
+    "verify:wasm-parity": "node scripts/verify-wasm-parity.mjs apps/renderer/dist apps/desktop/release/win-unpacked/resources/renderer",
     "package:windows": "pnpm build:ocr-sidecar && pnpm stage:ocr-runtime && pnpm build && pnpm --filter @srr/desktop package:windows"
   },
   "devDependencies": {

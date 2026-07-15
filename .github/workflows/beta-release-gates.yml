@@ -48,8 +48,31 @@ jobs:
       - run: node scripts/sync-renderer-wasm.mjs
       - run: pnpm --filter @srr/renderer build
       - run: node --test scripts/renderer-wasm-integration.test.mjs scripts/wasm-artifact.test.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: renderer-dist
+          path: apps/renderer/dist
       - run: pnpm exec playwright install --with-deps chromium
-      - run: pnpm test:e2e
+      - run: pnpm exec playwright test e2e/parity.spec.ts
+      - run: pnpm exec playwright test e2e/playback-performance.spec.ts --workers=1
+
+  visual-regression:
+    if: ${{ vars.SRR_VISUAL_BASELINES_READY == 'true' }}
+    needs: wasm-web
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.0.0, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.18.0, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - uses: actions/download-artifact@v4
+        with:
+          name: renderer-dist
+          path: apps/renderer/dist
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm exec playwright test e2e/visual.spec.ts
 
   electron-security:
     runs-on: ubuntu-24.04
@@ -72,6 +95,7 @@ jobs:
       - run: ctest --preset native-debug --output-on-failure -R srr_ocr_sidecar_protocol_tests
 
   windows-package-ocr:
+    needs: wasm-web
     runs-on: windows-2025
     steps:
       - uses: actions/checkout@v4
@@ -85,8 +109,13 @@ jobs:
           update: true
           install: >-
             mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
-            mingw-w64-ucrt-x86_64-opencv mingw-w64-ucrt-x86_64-tesseract-ocr
+            mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-opencv
+            mingw-w64-ucrt-x86_64-tesseract-ocr mingw-w64-ucrt-x86_64-tesseract-data-eng
       - run: pnpm install --frozen-lockfile
+      - uses: actions/download-artifact@v4
+        with:
+          name: renderer-dist
+          path: apps/renderer/dist
       - shell: msys2 {0}
         run: cmake --preset native-release && cmake --build --preset native-release --target srr_ocr_helper
       - shell: pwsh
@@ -94,7 +123,7 @@ jobs:
           SRR_TESSDATA_DIR: C:\msys64\ucrt64\share\tessdata
           SRR_OCR_DLL_DIRS: C:\msys64\ucrt64\bin
         run: pnpm stage:ocr-runtime
-      - run: pnpm build
-      - run: Copy-Item -Recurse apps/renderer/dist out/desktop-renderer
-      - run: pnpm verify:wasm-parity
+      - run: pnpm --filter @srr/storage build
+      - run: pnpm --filter @srr/desktop build
       - run: pnpm --filter @srr/desktop package:windows
+      - run: node scripts/verify-wasm-parity.mjs apps/renderer/dist apps/desktop/release/win-unpacked/resources/renderer

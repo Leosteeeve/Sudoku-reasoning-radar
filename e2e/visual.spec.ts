@@ -12,6 +12,15 @@ async function assertGeometry(page: Page) {
     expect(box, `text overlap/clipping at cell ${index}`).not.toBeNull();
     expect(box!.x).toBeGreaterThanOrEqual(board!.x - 1);
     expect(box!.x + box!.width).toBeLessThanOrEqual(board!.x + board!.width + 1);
+    const value = cells.nth(index).locator(".cell-value");
+    if (await value.count()) {
+      const text = await value.boundingBox();
+      expect(text, `cell-value ${index} must have text geometry`).not.toBeNull();
+      expect(text!.x).toBeGreaterThanOrEqual(box!.x - 1);
+      expect(text!.y).toBeGreaterThanOrEqual(box!.y - 1);
+      expect(text!.x + text!.width).toBeLessThanOrEqual(box!.x + box!.width + 1);
+      expect(text!.y + text!.height).toBeLessThanOrEqual(box!.y + box!.height + 1);
+    }
   }
   const target = cells.nth(40);
   const box = (await target.boundingBox())!;
