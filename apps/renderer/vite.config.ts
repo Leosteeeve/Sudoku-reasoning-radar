@@ -5,7 +5,7 @@ export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, ".", "SRR_");
 
   return {
-    base: env.SRR_BASE_PATH ?? "/",
+    base: env.SRR_BASE_PATH ?? "./",
     plugins: [react()],
     build: { outDir: "dist", emptyOutDir: true },
     test: {

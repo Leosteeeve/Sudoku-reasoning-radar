@@ -9,7 +9,7 @@ import { syncRendererWasm } from "./sync-renderer-wasm.mjs";
 const root = path.resolve(import.meta.dirname, "..");
 const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
 
-test("root renderer commands keep desktop-only work explicit", () => {
+test("root renderer commands provide real Web and desktop workflows", () => {
   assert.equal(packageJson.scripts["dev:web"], "pnpm --filter @srr/renderer dev");
   assert.match(packageJson.scripts.build, /@srr\/core-client build/);
   assert.match(packageJson.scripts.build, /@srr\/storage build/);
@@ -18,8 +18,12 @@ test("root renderer commands keep desktop-only work explicit", () => {
   assert.match(packageJson.scripts.test, /@srr\/storage test/);
   assert.match(packageJson.scripts.test, /@srr\/storage typecheck/);
   assert.match(packageJson.scripts.test, /@srr\/renderer test/);
-  assert.equal(packageJson.scripts["dev:desktop"], "node scripts/not-yet-available.mjs dev:desktop");
-  assert.equal(packageJson.scripts["package:windows"], "node scripts/not-yet-available.mjs package:windows");
+  assert.match(packageJson.scripts.test, /@srr\/desktop test/);
+  assert.match(packageJson.scripts.test, /@srr\/desktop typecheck/);
+  assert.match(packageJson.scripts["dev:desktop"], /@srr\/desktop dev/);
+  assert.doesNotMatch(packageJson.scripts["dev:desktop"], /not-yet-available/);
+  assert.match(packageJson.scripts["package:windows"], /@srr\/desktop package:windows/);
+  assert.doesNotMatch(packageJson.scripts["package:windows"], /not-yet-available/);
 });
 
 test("WASM sync copies the one loader/module pair into Vite public assets", async () => {

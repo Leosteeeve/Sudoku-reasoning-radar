@@ -1,0 +1,41 @@
+{
+  "name": "@srr/desktop",
+  "version": "0.4.0-beta.1",
+  "private": true,
+  "type": "module",
+  "main": "dist/main.js",
+  "dependencies": {
+    "@srr/storage": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.10.12",
+    "electron": "43.1.0",
+    "electron-builder": "26.15.3",
+    "typescript": "5.9.3"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "node --test test/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dev": "pnpm build && electron .",
+    "package:windows": "pnpm build && electron-builder --win nsis portable --publish never"
+  },
+  "build": {
+    "appId": "com.sudokureasoningradar.desktop",
+    "productName": "Sudoku Reasoning Radar",
+    "asar": true,
+    "files": ["dist/**", "package.json"],
+    "extraResources": [
+      { "from": "../renderer/dist", "to": "renderer" },
+      { "from": "../../out/build/native-release/srr-ocr-helper.exe", "to": "ocr/srr-ocr-helper.exe" }
+    ],
+    "win": {
+      "target": ["nsis", "portable"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": null
+  }
+}
