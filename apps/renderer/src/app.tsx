@@ -1,5 +1,5 @@
 import type { CoreClient, SolveStepV1 } from "@srr/core-client";
-import { useCallback, useEffect, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Board } from "./components/Board";
 import { CommandPanel } from "./components/CommandPanel";
 import { Constellation, isAdvancedStep } from "./components/Constellation";
@@ -48,12 +48,68 @@ function isInteractiveTarget(target: EventTarget | null): boolean {
   return false;
 }
 
+const focusableSelector = [
+  "button:not([disabled])", "a[href]", "input:not([disabled])", "select:not([disabled])",
+  "textarea:not([disabled])", "[tabindex]:not([tabindex='-1'])",
+].join(",");
+
+function MobileSheet({ labelId, returnFocusRef, onClose, children }: {
+  labelId: string;
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const dialogRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const dialog = dialogRef.current;
+    const initial = dialog?.querySelector<HTMLElement>(focusableSelector) ?? dialog;
+    initial?.focus();
+    return () => queueMicrotask(() => returnFocusRef.current?.focus());
+  }, [returnFocusRef]);
+
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = [...(dialogRef.current?.querySelectorAll<HTMLElement>(focusableSelector) ?? [])];
+    if (!focusable.length) {
+      event.preventDefault();
+      dialogRef.current?.focus();
+      return;
+    }
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && (document.activeElement === first || !dialogRef.current?.contains(document.activeElement))) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && (document.activeElement === last || !dialogRef.current?.contains(document.activeElement))) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    <div className="mobile-sheet-backdrop" onMouseDown={(event) => event.target === event.currentTarget && onClose()}>
+      <section ref={dialogRef} className="mobile-sheet" role="dialog" aria-modal="true" aria-labelledby={labelId} tabIndex={-1} onKeyDown={onKeyDown}>
+        {children}
+      </section>
+    </div>
+  );
+}
+
 export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage, initialTrace = [] }: WorkspaceProps) {
   const [state, dispatch] = useReducer(sessionReducer, undefined, () => ({
     ...createInitialSession(initialPuzzle, { language: initialLanguage ?? systemLanguage() }),
     trace: initialTrace,
   }));
   const commandTriggerRef = useRef<HTMLButtonElement>(null);
+  const lessonTriggerRef = useRef<HTMLButtonElement>(null);
+  const constellationTriggerRef = useRef<HTMLButtonElement>(null);
   const [announcement, setAnnouncement] = useState("");
   const [coreError, setCoreError] = useState(false);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
@@ -122,10 +178,16 @@ export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage,
         </aside>
         {narrowLayout && (
           <nav className="mobile-sheet-actions" aria-label={translate(state.language, "lesson")}>
-            <button type="button" onClick={() => dispatch({ type: "setLessonOpen", open: true })}>
+            <button ref={lessonTriggerRef} type="button" onClick={() => {
+              dispatch({ type: "setConstellationOpen", open: false });
+              dispatch({ type: "setLessonOpen", open: true });
+            }}>
               {translate(state.language, "openLessonSheet")}
             </button>
-            <button type="button" onClick={() => dispatch({ type: "setConstellationOpen", open: true })}>
+            <button ref={constellationTriggerRef} type="button" onClick={() => {
+              dispatch({ type: "setLessonOpen", open: false });
+              dispatch({ type: "setConstellationOpen", open: true });
+            }}>
               {translate(state.language, "openConstellationSheet")}
             </button>
           </nav>
@@ -133,28 +195,16 @@ export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage,
         <Timeline state={state} dispatch={dispatch} />
       </main>
       {narrowLayout && state.lessonOpen && (
-        <section
-          className="mobile-sheet"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="lesson-sheet-title"
-          onKeyDown={(event) => event.key === "Escape" && dispatch({ type: "setLessonOpen", open: false })}
-        >
+        <MobileSheet labelId="lesson-sheet-title" returnFocusRef={lessonTriggerRef} onClose={() => dispatch({ type: "setLessonOpen", open: false })}>
           <header><h2 id="lesson-sheet-title">{translate(state.language, "lesson")}</h2><button type="button" onClick={() => dispatch({ type: "setLessonOpen", open: false })}>{translate(state.language, "closeLessonSheet")}</button></header>
           <LessonCard step={step} language={state.language} />
-        </section>
+        </MobileSheet>
       )}
       {narrowLayout && constellationOpen && (
-        <section
-          className="mobile-sheet"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="constellation-sheet-title"
-          onKeyDown={(event) => event.key === "Escape" && dispatch({ type: "setConstellationOpen", open: false })}
-        >
+        <MobileSheet labelId="constellation-sheet-title" returnFocusRef={constellationTriggerRef} onClose={() => dispatch({ type: "setConstellationOpen", open: false })}>
           <header><h2 id="constellation-sheet-title">{translate(state.language, "constellation")}</h2><button type="button" onClick={() => dispatch({ type: "setConstellationOpen", open: false })}>{translate(state.language, "closeConstellationSheet")}</button></header>
           <Constellation step={step} language={state.language} />
-        </section>
+        </MobileSheet>
       )}
       {state.commandOpen && <CommandPanel language={state.language} onAnalyze={analyze} onClose={closeCommand} />}
       {coreError && <div className="core-toast" role="alert"><span>{translate(state.language, "responseFailed")}</span><button type="button" onClick={analyze}>{translate(state.language, "retry")}</button></div>}

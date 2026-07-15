@@ -141,14 +141,22 @@ describe("shared reasoning workspace", () => {
     await user.click(screen.getByRole("button", { name: /open lesson sheet/i }));
     const lessonSheet = screen.getByRole("dialog", { name: /reasoning lesson/i });
     expect(lessonSheet).toHaveAttribute("aria-modal", "true");
-    await user.click(within(lessonSheet).getByRole("button", { name: /close lesson sheet/i }));
+    const lessonClose = within(lessonSheet).getByRole("button", { name: /close lesson sheet/i });
+    expect(lessonClose).toHaveFocus();
+    await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: /reasoning lesson/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open lesson sheet/i })).toHaveFocus();
 
     await user.click(screen.getByRole("button", { name: /open constellation sheet/i }));
     const constellationSheet = screen.getByRole("dialog", { name: /logic constellation/i });
     expect(within(constellationSheet).getByRole("img", { name: /logic constellation/i })).toBeInTheDocument();
-    await user.click(within(constellationSheet).getByRole("button", { name: /close constellation sheet/i }));
+    const constellationClose = within(constellationSheet).getByRole("button", { name: /close constellation sheet/i });
+    expect(constellationClose).toHaveFocus();
+    await user.tab();
+    expect(constellationSheet).toContainElement(document.activeElement as HTMLElement);
+    await user.keyboard("{Escape}");
     expect(screen.queryByRole("dialog", { name: /logic constellation/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /open constellation sheet/i })).toHaveFocus();
   });
 
   it("keeps an auto-opened advanced constellation closed after the user dismisses it", async () => {
