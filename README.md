@@ -1,5 +1,26 @@
 # Sudoku Reasoning Radar
 
+## v0.4.0-beta.1 unified Web/Windows beta
+
+The beta keeps the legacy SDL and Web applications available while the shared React renderer is validated. Supported targets are Windows 10 22H2 or Windows 11 (x64), and the current two stable releases of Chrome, Edge, and Firefox. The Web build requires WebAssembly, IndexedDB, and ES modules.
+
+Portable commands (run from the repository root with Node 24.18, pnpm 11, CMake 3.24+, Ninja, a C++17 compiler, and the pinned Emscripten 6.0.3 SDK):
+
+```powershell
+pnpm bootstrap
+pnpm dev:web
+pnpm dev:desktop
+pnpm build
+pnpm test
+pnpm test:e2e:list
+pnpm test:e2e
+pnpm package:windows
+```
+
+`pnpm test:e2e` serves the already-built production renderer locally; install the Playwright Chromium binary explicitly on a test machine before running it. `pnpm package:windows` fails closed unless an OCR-enabled helper, every discovered OpenCV/Tesseract runtime DLL, and `eng.traineddata` can be staged. It produces unsigned NSIS and portable artifacts; it does not sign, upload, or install them.
+
+Release operations: [migration](docs/MIGRATION.md), [privacy and local data](docs/PRIVACY.md), [rollback](docs/ROLLBACK.md), and the [v0.4.0-beta.1 checklist](docs/RELEASE_CHECKLIST_v0.4.0-beta.1.md).
+
 Version: v0.3.0 Browser Edition + v0.2.1 Windows desktop OCR baseline
 
 A Windows C++17 visual Sudoku solver built with SDL2, SDL2_ttf, OpenCV, and Tesseract, plus a v0.3.0 Browser Edition built with Emscripten and SDL2. It supports editable 9x9 input, persistent pencil-mark candidates, animated solving steps, human-style logic, MRV search, a Turbo exact-cover solver, puzzle generation, hints, difficulty analysis, import/export, OCR image import on Windows, browser image-assisted import, mistake detection, and local puzzle storage.

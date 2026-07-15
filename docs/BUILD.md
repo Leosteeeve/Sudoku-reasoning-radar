@@ -1,5 +1,14 @@
 # Build and prerequisite checks
 
+## Supported beta toolchains and targets
+
+- Node 24.18, pnpm 11, Electron 43.1, C++17, CMake 3.24+, and Ninja.
+- Emscripten 6.0.3 at SDK release hash `9074aa513b501925adb1361e208932ad32a29a5f`.
+- Windows 10 22H2 or Windows 11 x64 for NSIS/portable artifacts.
+- Current two stable Chrome, Edge, and Firefox releases for the Web renderer.
+
+Use `pnpm bootstrap`, `pnpm dev:web`, `pnpm dev:desktop`, `pnpm build`, and `pnpm test` from the repository root. After a production renderer build, `pnpm test:e2e` starts a local Vite preview server. Windows packaging is `pnpm package:windows`; OCR packaging intentionally fails when OpenCV/Tesseract DLLs or `tessdata/eng.traineddata` are missing.
+
 The portable v1 core uses CMake, CTest, and Ninja. It does not link the legacy
 SDL, OpenCV, Tesseract, or platform-specific application libraries.
 

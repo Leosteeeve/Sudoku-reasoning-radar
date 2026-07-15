@@ -1,0 +1,100 @@
+name: beta-release-gates
+
+on: [push, pull_request]
+
+env:
+  CMAKE_CXX_STANDARD: "17"
+
+jobs:
+  native-cpp:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake --preset native-debug
+      - run: cmake --build --preset native-debug
+      - run: ctest --preset native-debug --output-on-failure
+
+  workspace:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.0.0, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.18.0, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @srr/core-client test && pnpm --filter @srr/core-client typecheck
+      - run: pnpm --filter @srr/storage test && pnpm --filter @srr/storage typecheck
+      - run: pnpm --filter @srr/renderer test && pnpm --filter @srr/renderer typecheck
+      - run: >-
+          node --test scripts/bootstrap.test.mjs scripts/desktop-contract.test.mjs
+          scripts/not-yet-available.test.mjs scripts/ocr-runtime.test.mjs
+          scripts/offline-web.test.mjs scripts/renderer-build.test.mjs
+          scripts/beta-release-contract.test.mjs scripts/playback-budget.test.mjs
+          scripts/verify-wasm-parity.test.mjs
+
+  wasm-web:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.0.0, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.18.0, cache: pnpm }
+      - uses: mymindstorm/setup-emsdk@v14
+        with: { version: 6.0.3, actions-cache-folder: emsdk-cache }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm build:wasm
+      - run: node scripts/sync-renderer-wasm.mjs
+      - run: pnpm --filter @srr/renderer build
+      - run: node --test scripts/renderer-wasm-integration.test.mjs scripts/wasm-artifact.test.mjs
+      - run: pnpm exec playwright install --with-deps chromium
+      - run: pnpm test:e2e
+
+  electron-security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.0.0, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.18.0, cache: pnpm }
+      - run: pnpm install --frozen-lockfile --ignore-scripts
+      - run: pnpm --filter @srr/desktop test
+      - run: pnpm --filter @srr/desktop typecheck
+
+  ocr-protocol-stub:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - run: cmake --preset native-debug
+      - run: cmake --build --preset native-debug --target srr_ocr_sidecar_protocol_tests
+      - run: ctest --preset native-debug --output-on-failure -R srr_ocr_sidecar_protocol_tests
+
+  windows-package-ocr:
+    runs-on: windows-2025
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: 11.0.0, run_install: false }
+      - uses: actions/setup-node@v4
+        with: { node-version: 24.18.0, cache: pnpm }
+      - uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-cmake mingw-w64-ucrt-x86_64-ninja
+            mingw-w64-ucrt-x86_64-opencv mingw-w64-ucrt-x86_64-tesseract-ocr
+      - run: pnpm install --frozen-lockfile
+      - shell: msys2 {0}
+        run: cmake --preset native-release && cmake --build --preset native-release --target srr_ocr_helper
+      - shell: pwsh
+        env:
+          SRR_TESSDATA_DIR: C:\msys64\ucrt64\share\tessdata
+          SRR_OCR_DLL_DIRS: C:\msys64\ucrt64\bin
+        run: pnpm stage:ocr-runtime
+      - run: pnpm build
+      - run: Copy-Item -Recurse apps/renderer/dist out/desktop-renderer
+      - run: pnpm verify:wasm-parity
+      - run: pnpm --filter @srr/desktop package:windows

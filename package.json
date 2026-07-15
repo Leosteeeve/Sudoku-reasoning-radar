@@ -17,6 +17,12 @@
     "build:wasm": "cmake --preset wasm-release && cmake --build --preset wasm-release --target srr_core_wasm",
     "test": "cmake --preset native-debug && cmake --build --preset native-debug && ctest --preset native-debug --output-on-failure && pnpm --filter @srr/core-client test && pnpm --filter @srr/core-client typecheck && pnpm --filter @srr/storage test && pnpm --filter @srr/storage typecheck && pnpm --filter @srr/renderer test && pnpm --filter @srr/renderer typecheck && pnpm --filter @srr/desktop test && pnpm --filter @srr/desktop typecheck && node --test scripts/*.test.mjs",
     "test:wasm-artifact": "node --test scripts/wasm-artifact.test.mjs",
+    "test:e2e": "playwright test",
+    "test:e2e:list": "playwright test --list",
+    "verify:wasm-parity": "node scripts/verify-wasm-parity.mjs apps/renderer/dist out/desktop-renderer",
     "package:windows": "pnpm build:ocr-sidecar && pnpm stage:ocr-runtime && pnpm build && pnpm --filter @srr/desktop package:windows"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.61.1"
   }
 }
