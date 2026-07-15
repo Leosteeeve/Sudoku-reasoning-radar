@@ -33,6 +33,7 @@ if(EMSCRIPTEN)
         "-sFILESYSTEM=0"
         "-sALLOW_MEMORY_GROWTH=1"
         "-sEXPORTED_FUNCTIONS=['_srr_dispatch','_srr_free','_malloc','_free']"
+        "-sEXPORTED_RUNTIME_METHODS=['UTF8ToString','stringToUTF8','lengthBytesUTF8']"
     )
 endif()
 

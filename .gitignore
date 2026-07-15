@@ -13,6 +13,8 @@ web_build/
 out/
 node_modules/
 dist/
+apps/renderer/public/srr-core.js
+apps/renderer/public/srr-core.wasm
 website/downloads/*.zip
 docs/downloads/*.zip
 
