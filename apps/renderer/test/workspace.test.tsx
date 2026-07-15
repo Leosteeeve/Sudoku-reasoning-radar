@@ -4,6 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { CoreClient } from "@srr/core-client";
 import { CoreShell, ReasoningWorkspace } from "../src/app.tsx";
+import { Constellation } from "../src/components/Constellation.tsx";
+import { LessonCard } from "../src/components/LessonCard.tsx";
 import { fixtureClient, fixtureStep, puzzle } from "./fixtures.ts";
 
 describe("shared reasoning workspace", () => {
@@ -89,6 +91,134 @@ describe("shared reasoning workspace", () => {
     const ocr = within(panel).getByRole("button", { name: /OCR/i });
     expect(ocr).toBeDisabled();
     expect(within(panel).getByText(/available in the Windows shell/i)).toBeInTheDocument();
+  });
+
+  it("does not hijack native keyboard behavior on interactive targets", async () => {
+    const advanced = { ...fixtureStep, id: "step-000002", technique: "x_wing" as const };
+    render(
+      <ReasoningWorkspace
+        initialPuzzle={puzzle}
+        coreClient={fixtureClient()}
+        initialLanguage="en"
+        initialTrace={[fixtureStep, advanced]}
+      />,
+    );
+    const play = screen.getByRole("button", { name: "Play" });
+    const space = new KeyboardEvent("keydown", { key: " ", bubbles: true, cancelable: true });
+    play.dispatchEvent(space);
+    expect(space.defaultPrevented).toBe(false);
+
+    const editable = document.createElement("div");
+    editable.contentEditable = "true";
+    document.body.append(editable);
+    editable.focus();
+    const digit = new KeyboardEvent("keydown", { key: "8", bubbles: true, cancelable: true });
+    editable.dispatchEvent(digit);
+    expect(digit.defaultPrevented).toBe(false);
+    editable.remove();
+  });
+
+  it("opens and closes labelled lesson and constellation bottom-sheet dialogs", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query.includes("max-width"),
+      media: query,
+      onchange: null,
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    const user = userEvent.setup();
+    render(
+      <ReasoningWorkspace
+        initialPuzzle={puzzle}
+        coreClient={fixtureClient()}
+        initialLanguage="en"
+        initialTrace={[fixtureStep]}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: /open lesson sheet/i }));
+    const lessonSheet = screen.getByRole("dialog", { name: /reasoning lesson/i });
+    expect(lessonSheet).toHaveAttribute("aria-modal", "true");
+    await user.click(within(lessonSheet).getByRole("button", { name: /close lesson sheet/i }));
+    expect(screen.queryByRole("dialog", { name: /reasoning lesson/i })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: /open constellation sheet/i }));
+    const constellationSheet = screen.getByRole("dialog", { name: /logic constellation/i });
+    expect(within(constellationSheet).getByRole("img", { name: /logic constellation/i })).toBeInTheDocument();
+    await user.click(within(constellationSheet).getByRole("button", { name: /close constellation sheet/i }));
+    expect(screen.queryByRole("dialog", { name: /logic constellation/i })).not.toBeInTheDocument();
+  });
+
+  it("keeps an auto-opened advanced constellation closed after the user dismisses it", async () => {
+    const user = userEvent.setup();
+    const advanced = { ...fixtureStep, technique: "x_wing" as const };
+    render(
+      <ReasoningWorkspace initialPuzzle={puzzle} coreClient={fixtureClient()} initialLanguage="en" initialTrace={[advanced]} />,
+    );
+    expect(await screen.findByRole("img", { name: /logic constellation/i })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /collapse logic constellation/i }));
+    expect(screen.queryByRole("img", { name: /logic constellation/i })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /中文/ }));
+    expect(screen.queryByRole("img", { name: /logic constellation/i })).not.toBeInTheDocument();
+  });
+
+  it("localizes action prose without exposing raw protocol action values", () => {
+    const backtrack = { ...fixtureStep, action: "backtrack" as const, candidateDeltas: [] };
+    const { rerender } = render(<LessonCard step={backtrack} language="en" />);
+    expect(screen.getByTestId("lesson-card")).toHaveTextContent("Return to the last consistent branch");
+    expect(screen.getByTestId("lesson-card")).not.toHaveTextContent(/backtrack/i);
+    expect(screen.getByTestId("lesson-card")).not.toHaveTextContent("Remove —");
+    rerender(<LessonCard step={backtrack} language="zh" />);
+    expect(screen.getByTestId("lesson-card")).toHaveTextContent("返回上一个可靠分支");
+  });
+
+  it("keeps constellation node coordinates stable when evidence order changes", () => {
+    const ordered = fixtureStep;
+    const reversed = {
+      ...fixtureStep,
+      evidence: { ...fixtureStep.evidence, nodes: [...fixtureStep.evidence.nodes].reverse() },
+    };
+    const { container, rerender } = render(<Constellation step={ordered} language="en" />);
+    const coordinates = () => new Map(
+      [...container.querySelectorAll<SVGGElement>("[data-node-id]")]
+        .map((node) => [node.dataset.nodeId, node.innerHTML]),
+    );
+    const first = coordinates();
+    rerender(<Constellation step={reversed} language="en" />);
+    expect(coordinates()).toEqual(first);
+  });
+
+  it("disables empty and boundary timeline controls", () => {
+    const { unmount } = render(
+      <ReasoningWorkspace initialPuzzle={puzzle} coreClient={fixtureClient()} initialLanguage="en" />,
+    );
+    expect(screen.getByRole("button", { name: /previous step/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Play" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /next step/i })).toBeDisabled();
+    unmount();
+    render(
+      <ReasoningWorkspace initialPuzzle={puzzle} coreClient={fixtureClient()} initialLanguage="en" initialTrace={[fixtureStep]} />,
+    );
+    expect(screen.getByRole("button", { name: /previous step/i })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /next step/i })).toBeDisabled();
+  });
+
+  it("traps command focus and restores it to the trigger after Escape", async () => {
+    const user = userEvent.setup();
+    render(<ReasoningWorkspace initialPuzzle={puzzle} coreClient={fixtureClient()} initialLanguage="en" />);
+    const trigger = screen.getByRole("button", { name: /commands/i });
+    await user.click(trigger);
+    const panel = screen.getByRole("dialog", { name: /command panel/i });
+    expect(within(panel).getByRole("searchbox")).toHaveFocus();
+    const close = within(panel).getByRole("button", { name: /close/i });
+    close.focus();
+    await user.tab({ shift: true });
+    expect(panel).toContainElement(document.activeElement as HTMLElement);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog", { name: /command panel/i })).not.toBeInTheDocument();
+    expect(trigger).toHaveFocus();
   });
 
   it("exposes live announcements, high contrast, visible focus and reduced-motion state", async () => {

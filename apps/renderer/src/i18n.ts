@@ -1,4 +1,4 @@
-import type { TechniqueId } from "@srr/core-client";
+import type { TechniqueId, TraceAction } from "@srr/core-client";
 import type { Language } from "./session";
 
 const catalogs = {
@@ -37,11 +37,23 @@ const catalogs = {
     conclude: "Conclude",
     observeBody: "Inspect the marked cells and their shared unit.",
     eliminateBody: "Remove {digits} from the highlighted candidates.",
-    concludeBody: "Apply this {action} before moving to the next step.",
+    noEliminationBody: "No candidate removal is needed for this step.",
+    concludeBody: "{action}",
+    actionAnalyze: "Review the evidence before changing the board.",
+    actionPlace: "Place the confirmed digit in the highlighted cell.",
+    actionEliminate: "Keep the remaining candidates and continue with the deduction.",
+    actionGuess: "Open a careful branch from the strongest available candidate.",
+    actionContradiction: "Mark the conflict and reject this branch.",
+    actionBacktrack: "Return to the last consistent branch before continuing.",
+    actionComplete: "The board is complete; review the reasoning trail.",
     noStep: "Analyze the puzzle to open a guided reasoning step.",
     constellation: "Logic constellation",
     expandConstellation: "Expand logic constellation",
     collapseConstellation: "Collapse logic constellation",
+    openLessonSheet: "Open lesson sheet",
+    closeLessonSheet: "Close lesson sheet",
+    openConstellationSheet: "Open constellation sheet",
+    closeConstellationSheet: "Close constellation sheet",
     timeline: "Reasoning timeline",
     play: "Play",
     pause: "Pause",
@@ -105,11 +117,23 @@ const catalogs = {
     conclude: "结论",
     observeBody: "检查标记格及其共同区域。",
     eliminateBody: "从高亮候选中移除 {digits}。",
-    concludeBody: "完成本次{action}，再进入下一步。",
+    noEliminationBody: "这一步不需要移除候选数。",
+    concludeBody: "{action}",
+    actionAnalyze: "先核对证据，再调整棋盘。",
+    actionPlace: "在高亮格中填入已经确认的数字。",
+    actionEliminate: "保留剩余候选数，并继续完成推理。",
+    actionGuess: "从最有把握的候选数开始谨慎分支。",
+    actionContradiction: "标记冲突，并排除当前分支。",
+    actionBacktrack: "返回上一个可靠分支后继续推理。",
+    actionComplete: "棋盘已经完成，可以回顾整条推理路径。",
     noStep: "分析题目后即可查看分步推理。",
     constellation: "逻辑星图",
     expandConstellation: "展开逻辑星图",
     collapseConstellation: "收起逻辑星图",
+    openLessonSheet: "打开课程面板",
+    closeLessonSheet: "关闭课程面板",
+    openConstellationSheet: "打开逻辑星图面板",
+    closeConstellationSheet: "关闭逻辑星图面板",
     timeline: "推理时间线",
     play: "播放",
     pause: "暂停",
@@ -142,6 +166,16 @@ const catalogs = {
 
 export type MessageKey = keyof typeof catalogs.en;
 
+const actionMessageKeys: Record<TraceAction, MessageKey> = {
+  analyze: "actionAnalyze",
+  place: "actionPlace",
+  eliminate: "actionEliminate",
+  guess: "actionGuess",
+  contradiction: "actionContradiction",
+  backtrack: "actionBacktrack",
+  complete: "actionComplete",
+};
+
 export function translate(
   language: Language,
   key: MessageKey,
@@ -152,6 +186,10 @@ export function translate(
     message = message.replaceAll(`{${name}}`, String(value));
   }
   return message;
+}
+
+export function localizedAction(language: Language, action: TraceAction): string {
+  return translate(language, actionMessageKeys[action]);
 }
 
 export const techniqueNames: Record<TechniqueId, { en: string; zh: string }> = {

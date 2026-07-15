@@ -1,7 +1,7 @@
 import type { SolveStepV1 } from "@srr/core-client";
 import type { Dispatch } from "react";
 import { translate, type MessageKey } from "../i18n";
-import type { Language, SessionAction, SessionState } from "../session";
+import { actionForKey, type Language, type SessionAction, type SessionState } from "../session";
 
 interface BoardProps {
   state: SessionState;
@@ -95,8 +95,14 @@ export function Board({ state, dispatch }: BoardProps) {
                       aria-label={cellLabel(state.language, row, col, value, given)}
                       aria-description={description || undefined}
                       aria-readonly={given ? "true" : "false"}
-                      onClick={() => dispatch({ type: "select", cell: { row, col } })}
-                    >
+                    onClick={() => dispatch({ type: "select", cell: { row, col } })}
+                    onKeyDown={(event) => {
+                      const action = actionForKey(event.key, event);
+                      if (!action || ["togglePlay", "setCommandOpen", "dismissOverlays"].includes(action.type)) return;
+                      event.preventDefault();
+                      dispatch(action);
+                    }}
+                  >
                       {given && <span className="cell-origin" aria-hidden="true">●</span>}
                       {value ? <span className="cell-value">{value}</span> : (
                         <span className="candidate-grid" aria-hidden="true">

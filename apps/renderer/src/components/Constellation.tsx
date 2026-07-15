@@ -6,9 +6,9 @@ function hash(value: string): number {
   return [...value].reduce((total, character) => ((total * 31) + character.charCodeAt(0)) >>> 0, 17);
 }
 
-function position(node: EvidenceNode, index: number, count: number) {
-  const angle = ((Math.PI * 2 * index) / Math.max(1, count)) + (hash(node.id) % 19) / 25;
-  const radius = 88 + (hash(node.id) % 22);
+function position(node: EvidenceNode) {
+  const angle = ((hash(node.id) % 3600) / 3600) * Math.PI * 2;
+  const radius = 72 + (hash(`${node.id}:radius`) % 44);
   return { x: 150 + Math.cos(angle) * radius, y: 120 + Math.sin(angle) * radius };
 }
 
@@ -28,7 +28,7 @@ export function isAdvancedStep(step?: SolveStepV1): boolean {
 
 export function Constellation({ step, language }: { step?: SolveStepV1; language: Language }) {
   if (!step) return null;
-  const points = new Map(step.evidence.nodes.map((node, index) => [node.id, position(node, index, step.evidence.nodes.length)]));
+  const points = new Map(step.evidence.nodes.map((node) => [node.id, position(node)]));
   return (
     <svg className="constellation" viewBox="0 0 300 240" role="img" aria-label={translate(language, "constellation")}>
       <g className="constellation-edges">
@@ -42,7 +42,7 @@ export function Constellation({ step, language }: { step?: SolveStepV1; language
       <g className="constellation-nodes">
         {step.evidence.nodes.map((node) => {
           const point = points.get(node.id)!;
-          return <g key={node.id} data-node-id={node.id} className={`evidence-node evidence-node--${node.kind}`}><NodeShape node={node} {...point} /></g>;
+          return <g key={node.id} data-node-id={node.id} data-x={point.x} data-y={point.y} className={`evidence-node evidence-node--${node.kind}`}><NodeShape node={node} {...point} /></g>;
         })}
       </g>
     </svg>

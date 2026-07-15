@@ -20,6 +20,7 @@ export interface SessionState {
   commandOpen: boolean;
   lessonOpen: boolean;
   constellationOpen: boolean;
+  constellationSeenStepIds: string[];
   theme: Theme;
   highContrast: boolean;
   past: Snapshot[];
@@ -43,6 +44,7 @@ export type SessionAction =
   | { type: "setCommandOpen"; open: boolean }
   | { type: "setLessonOpen"; open: boolean }
   | { type: "setConstellationOpen"; open: boolean }
+  | { type: "showAdvancedConstellation"; stepId: string }
   | { type: "setTheme"; theme: Theme }
   | { type: "setHighContrast"; enabled: boolean }
   | { type: "dismissOverlays" };
@@ -78,6 +80,7 @@ export function createInitialSession(
     commandOpen: false,
     lessonOpen: false,
     constellationOpen: false,
+    constellationSeenStepIds: [],
     theme: "light",
     highContrast: false,
     past: [],
@@ -123,6 +126,7 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       const values = [...state.values];
       const candidates = [...state.candidates];
       if (state.noteMode) {
+        if (values[index] !== 0) return state;
         candidates[index] ^= 1 << (action.digit - 1);
       } else {
         if (values[index] === action.digit && candidates[index] === 0) return state;
@@ -176,14 +180,26 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       };
     }
     case "loadTrace":
-      return { ...state, trace: action.steps, currentStep: 0, playing: false };
-    case "setStep":
       return {
         ...state,
-        currentStep: Math.max(0, Math.min(Math.max(0, state.trace.length - 1), action.step)),
+        trace: action.steps,
+        currentStep: 0,
+        playing: false,
+        constellationOpen: false,
+        constellationSeenStepIds: [],
       };
+    case "setStep": {
+      const currentStep = Math.max(0, Math.min(Math.max(0, state.trace.length - 1), action.step));
+      return {
+        ...state,
+        currentStep,
+        playing: state.playing && currentStep < state.trace.length - 1,
+      };
+    }
     case "togglePlay":
-      return { ...state, playing: !state.playing };
+      if (state.playing) return { ...state, playing: false };
+      if (state.trace.length < 2 || state.currentStep >= state.trace.length - 1) return state;
+      return { ...state, playing: true };
     case "setSpeed":
       return { ...state, speed: action.speed };
     case "setCommandOpen":
@@ -192,6 +208,13 @@ export function sessionReducer(state: SessionState, action: SessionAction): Sess
       return { ...state, lessonOpen: action.open };
     case "setConstellationOpen":
       return { ...state, constellationOpen: action.open };
+    case "showAdvancedConstellation":
+      if (state.constellationSeenStepIds.includes(action.stepId)) return state;
+      return {
+        ...state,
+        constellationOpen: true,
+        constellationSeenStepIds: [...state.constellationSeenStepIds, action.stepId],
+      };
     case "setTheme":
       return { ...state, theme: action.theme };
     case "setHighContrast":

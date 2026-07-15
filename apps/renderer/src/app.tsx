@@ -1,5 +1,5 @@
 import type { CoreClient, SolveStepV1 } from "@srr/core-client";
-import { useCallback, useEffect, useReducer, useState } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState } from "react";
 import { Board } from "./components/Board";
 import { CommandPanel } from "./components/CommandPanel";
 import { Constellation, isAdvancedStep } from "./components/Constellation";
@@ -18,17 +18,53 @@ interface WorkspaceProps {
   initialTrace?: SolveStepV1[];
 }
 
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = useState(() => globalThis.matchMedia?.(query).matches ?? false);
+  useEffect(() => {
+    const media = globalThis.matchMedia?.(query);
+    if (!media) return;
+    const update = () => setMatches(media.matches);
+    update();
+    media.addEventListener("change", update);
+    return () => media.removeEventListener("change", update);
+  }, [query]);
+  return matches;
+}
+
+function isInteractiveTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof Element)) return false;
+  let element: Element | null = target;
+  while (element) {
+    if (element.matches(
+      "button, input, select, textarea, a[href], summary, [role='button'], [role='link'], [role='textbox'], [role='combobox']",
+    )) return true;
+    const editable = (element as HTMLElement).contentEditable;
+    if ((editable && editable !== "false" && editable !== "inherit")
+        || (element.hasAttribute("contenteditable") && element.getAttribute("contenteditable") !== "false")) {
+      return true;
+    }
+    element = element.parentElement;
+  }
+  return false;
+}
+
 export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage, initialTrace = [] }: WorkspaceProps) {
   const [state, dispatch] = useReducer(sessionReducer, undefined, () => ({
     ...createInitialSession(initialPuzzle, { language: initialLanguage ?? systemLanguage() }),
     trace: initialTrace,
-    constellationOpen: isAdvancedStep(initialTrace[0]),
   }));
+  const commandTriggerRef = useRef<HTMLButtonElement>(null);
   const [announcement, setAnnouncement] = useState("");
   const [coreError, setCoreError] = useState(false);
-  const reducedMotion = globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+  const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
+  const narrowLayout = useMediaQuery("(max-width: 700px)");
   const step = state.trace[state.currentStep];
-  const constellationOpen = state.constellationOpen || isAdvancedStep(step);
+  const constellationOpen = state.constellationOpen;
+
+  const closeCommand = useCallback(() => {
+    dispatch({ type: "setCommandOpen", open: false });
+    queueMicrotask(() => commandTriggerRef.current?.focus());
+  }, []);
 
   const analyze = useCallback(async () => {
     dispatch({ type: "setCommandOpen", open: false });
@@ -44,9 +80,14 @@ export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage,
   }, [coreClient, state.language, state.solverMode, state.values]);
 
   useEffect(() => {
+    if (step && isAdvancedStep(step)) {
+      dispatch({ type: "showAdvancedConstellation", stepId: step.id });
+    }
+  }, [step]);
+
+  useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const target = event.target as HTMLElement | null;
-      if (target?.matches("input, select, textarea") && event.key !== "Escape") return;
+      if (isInteractiveTarget(event.target)) return;
       const action = actionForKey(event.key, event);
       if (!action) return;
       event.preventDefault();
@@ -67,7 +108,7 @@ export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage,
 
   return (
     <div className={`app-shell theme-${state.theme}${state.highContrast ? " high-contrast" : ""}${reducedMotion ? " reduced-motion" : ""}`} lang={state.language === "zh" ? "zh-CN" : "en"}>
-      <TopBar state={state} dispatch={dispatch} />
+      <TopBar state={state} dispatch={dispatch} commandTriggerRef={commandTriggerRef} />
       <main className="workspace-layout">
         <Board state={state} dispatch={dispatch} />
         <aside className={`lesson-rail${state.lessonOpen ? " is-open" : ""}`}>
@@ -79,9 +120,43 @@ export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage,
             {constellationOpen && <Constellation step={step} language={state.language} />}
           </section>
         </aside>
+        {narrowLayout && (
+          <nav className="mobile-sheet-actions" aria-label={translate(state.language, "lesson")}>
+            <button type="button" onClick={() => dispatch({ type: "setLessonOpen", open: true })}>
+              {translate(state.language, "openLessonSheet")}
+            </button>
+            <button type="button" onClick={() => dispatch({ type: "setConstellationOpen", open: true })}>
+              {translate(state.language, "openConstellationSheet")}
+            </button>
+          </nav>
+        )}
         <Timeline state={state} dispatch={dispatch} />
       </main>
-      {state.commandOpen && <CommandPanel language={state.language} onAnalyze={analyze} onClose={() => dispatch({ type: "setCommandOpen", open: false })} />}
+      {narrowLayout && state.lessonOpen && (
+        <section
+          className="mobile-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="lesson-sheet-title"
+          onKeyDown={(event) => event.key === "Escape" && dispatch({ type: "setLessonOpen", open: false })}
+        >
+          <header><h2 id="lesson-sheet-title">{translate(state.language, "lesson")}</h2><button type="button" onClick={() => dispatch({ type: "setLessonOpen", open: false })}>{translate(state.language, "closeLessonSheet")}</button></header>
+          <LessonCard step={step} language={state.language} />
+        </section>
+      )}
+      {narrowLayout && constellationOpen && (
+        <section
+          className="mobile-sheet"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="constellation-sheet-title"
+          onKeyDown={(event) => event.key === "Escape" && dispatch({ type: "setConstellationOpen", open: false })}
+        >
+          <header><h2 id="constellation-sheet-title">{translate(state.language, "constellation")}</h2><button type="button" onClick={() => dispatch({ type: "setConstellationOpen", open: false })}>{translate(state.language, "closeConstellationSheet")}</button></header>
+          <Constellation step={step} language={state.language} />
+        </section>
+      )}
+      {state.commandOpen && <CommandPanel language={state.language} onAnalyze={analyze} onClose={closeCommand} />}
       {coreError && <div className="core-toast" role="alert"><span>{translate(state.language, "responseFailed")}</span><button type="button" onClick={analyze}>{translate(state.language, "retry")}</button></div>}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
     </div>

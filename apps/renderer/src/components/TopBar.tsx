@@ -1,8 +1,12 @@
-import type { Dispatch } from "react";
+import type { Dispatch, RefObject } from "react";
 import { translate } from "../i18n";
 import type { SessionAction, SessionState } from "../session";
 
-export function TopBar({ state, dispatch }: { state: SessionState; dispatch: Dispatch<SessionAction> }) {
+export function TopBar({ state, dispatch, commandTriggerRef }: {
+  state: SessionState;
+  dispatch: Dispatch<SessionAction>;
+  commandTriggerRef?: RefObject<HTMLButtonElement | null>;
+}) {
   return (
     <header className="top-bar">
       <div className="brand-lockup">
@@ -23,7 +27,7 @@ export function TopBar({ state, dispatch }: { state: SessionState; dispatch: Dis
           <button type="button" aria-label={translate(state.language, "undo")} disabled={!state.past.length} onClick={() => dispatch({ type: "undo" })}>↶</button>
           <button type="button" aria-label={translate(state.language, "redo")} disabled={!state.future.length} onClick={() => dispatch({ type: "redo" })}>↷</button>
         </div>
-        <button type="button" className="command-trigger" onClick={() => dispatch({ type: "setCommandOpen", open: true })}><span aria-hidden="true">⌘</span>{translate(state.language, "commands")}</button>
+        <button ref={commandTriggerRef} type="button" className="command-trigger" onClick={() => dispatch({ type: "setCommandOpen", open: true })}><span aria-hidden="true">⌘</span>{translate(state.language, "commands")}</button>
         <details className="settings-menu">
           <summary aria-label={translate(state.language, "settings")}>◐</summary>
           <div>
