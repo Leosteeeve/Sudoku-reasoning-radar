@@ -12,8 +12,11 @@ const packageJson = JSON.parse(await readFile(path.join(root, "package.json"), "
 test("root renderer commands keep desktop-only work explicit", () => {
   assert.equal(packageJson.scripts["dev:web"], "pnpm --filter @srr/renderer dev");
   assert.match(packageJson.scripts.build, /@srr\/core-client build/);
+  assert.match(packageJson.scripts.build, /@srr\/storage build/);
   assert.match(packageJson.scripts.build, /build-wasm/);
   assert.match(packageJson.scripts.build, /@srr\/renderer build/);
+  assert.match(packageJson.scripts.test, /@srr\/storage test/);
+  assert.match(packageJson.scripts.test, /@srr\/storage typecheck/);
   assert.match(packageJson.scripts.test, /@srr\/renderer test/);
   assert.equal(packageJson.scripts["dev:desktop"], "node scripts/not-yet-available.mjs dev:desktop");
   assert.equal(packageJson.scripts["package:windows"], "node scripts/not-yet-available.mjs package:windows");

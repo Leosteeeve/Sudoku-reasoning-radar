@@ -215,6 +215,7 @@ button, select, summary, input { outline-offset: 3px; }
 .launch-state h1 { font: 600 2rem Georgia, serif; }
 .launch-state button { min-height: 42px; border: 1px solid var(--navy); border-radius: 99px; padding: 8px 18px; color: var(--paper); background: var(--navy); }
 .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0,0,0,0) !important; white-space: nowrap !important; border: 0 !important; }
+.offline-status { position: fixed; z-index: 12; right: 16px; bottom: 14px; padding: 7px 12px; border: 1px solid var(--mint); border-radius: 999px; color: var(--ink); background: color-mix(in srgb, var(--paper) 92%, var(--mint)); font-size: .78rem; box-shadow: 0 8px 24px rgba(11,18,33,.12); }
 
 @media (max-width: 900px) {
   .top-bar { align-items: flex-start; }

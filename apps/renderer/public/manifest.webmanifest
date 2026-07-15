@@ -1,0 +1,13 @@
+{
+  "name": "Sudoku Reasoning Radar",
+  "short_name": "Reasoning Radar",
+  "description": "Offline-first bilingual Sudoku reasoning studio",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f3eee2",
+  "theme_color": "#18233f",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

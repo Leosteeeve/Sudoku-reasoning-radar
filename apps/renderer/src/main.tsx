@@ -8,3 +8,12 @@ const starterPuzzle =
 createRoot(document.getElementById("root")!).render(
   <StrictMode><CoreShell initialPuzzle={starterPuzzle} /></StrictMode>,
 );
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    const base = new URL(import.meta.env.BASE_URL, window.location.origin);
+    void navigator.serviceWorker.register(new URL("sw.js", base)).then(() => navigator.serviceWorker.ready)
+      .then(() => window.dispatchEvent(new CustomEvent("srr:offline-ready")))
+      .catch(() => undefined);
+  }, { once: true });
+}

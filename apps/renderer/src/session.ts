@@ -47,6 +47,8 @@ export type SessionAction =
   | { type: "showAdvancedConstellation"; stepId: string }
   | { type: "setTheme"; theme: Theme }
   | { type: "setHighContrast"; enabled: boolean }
+  | { type: "hydrate"; puzzle: string; values: number[]; candidates: number[]; solverMode: SolverMode; trace: SolveStepV1[]; currentStep: number }
+  | { type: "loadPuzzle"; puzzle: string }
   | { type: "dismissOverlays" };
 
 export interface KeyModifiers {
@@ -108,6 +110,29 @@ function selectedIndex(state: SessionState): number | null {
 
 export function sessionReducer(state: SessionState, action: SessionAction): SessionState {
   switch (action.type) {
+    case "hydrate": {
+      if (action.values.length !== 81 || action.candidates.length !== 81) return state;
+      const hydrated = createInitialSession(action.puzzle, { language: state.language });
+      return {
+        ...hydrated,
+        values: [...action.values],
+        candidates: [...action.candidates],
+        solverMode: action.solverMode,
+        trace: action.trace,
+        currentStep: Math.max(0, Math.min(Math.max(0, action.trace.length - 1), action.currentStep)),
+        theme: state.theme,
+        highContrast: state.highContrast,
+      };
+    }
+    case "loadPuzzle": {
+      const loaded = createInitialSession(action.puzzle, { language: state.language });
+      return {
+        ...loaded,
+        solverMode: state.solverMode,
+        theme: state.theme,
+        highContrast: state.highContrast,
+      };
+    }
     case "select":
       return { ...state, selected: action.cell };
     case "moveSelection": {

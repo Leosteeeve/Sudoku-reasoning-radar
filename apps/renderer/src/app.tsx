@@ -1,14 +1,18 @@
 import type { CoreClient, SolveStepV1 } from "@srr/core-client";
+import { normalizePuzzle, type MigrationReport, type PuzzleRecord, type StorageService } from "@srr/storage";
 import { useCallback, useEffect, useReducer, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Board } from "./components/Board";
 import { CommandPanel } from "./components/CommandPanel";
 import { Constellation, isAdvancedStep } from "./components/Constellation";
 import { LessonCard } from "./components/LessonCard";
+import { ImageReviewDialog } from "./components/ImageReviewDialog";
 import { Timeline } from "./components/Timeline";
 import { TopBar } from "./components/TopBar";
 import { loadBrowserCoreClient } from "./core/wasm-transport";
 import { systemLanguage, translate } from "./i18n";
 import { actionForKey, createInitialSession, sessionReducer, type Language } from "./session";
+import { browserFileActions, type BrowserFileActions } from "./web/files";
+import { loadWebStorage, type WebStorageRuntime } from "./web/storage";
 import "./styles.css";
 
 interface WorkspaceProps {
@@ -16,6 +20,22 @@ interface WorkspaceProps {
   coreClient: CoreClient;
   initialLanguage?: Language;
   initialTrace?: SolveStepV1[];
+  storageService?: Pick<StorageService, "loadCurrentSession" | "saveCurrentSession">;
+  saveDelayMs?: number;
+  fileActions?: BrowserFileActions;
+  storageError?: string;
+  migrationReport?: MigrationReport;
+}
+
+function sessionSignature(value: {
+  puzzle: string;
+  values: number[];
+  noteMasks: number[];
+  mode: string;
+  trace: unknown[];
+  currentStep: number;
+}): string {
+  return JSON.stringify(value);
 }
 
 function useMediaQuery(query: string): boolean {
@@ -102,7 +122,14 @@ function MobileSheet({ labelId, returnFocusRef, onClose, children }: {
   );
 }
 
-export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage, initialTrace = [] }: WorkspaceProps) {
+type WorkspaceStorage = Pick<StorageService,
+  "loadCurrentSession" | "saveCurrentSession" | "upsertPuzzle" | "listPuzzles" | "importPuzzles" | "importBackup" | "exportBackup"
+>;
+
+export function ReasoningWorkspace({
+  initialPuzzle, coreClient, initialLanguage, initialTrace = [], storageService: storage,
+  saveDelayMs = 300, fileActions = browserFileActions, storageError, migrationReport,
+}: WorkspaceProps & { storageService?: WorkspaceStorage }) {
   const [state, dispatch] = useReducer(sessionReducer, undefined, () => ({
     ...createInitialSession(initialPuzzle, { language: initialLanguage ?? systemLanguage() }),
     trace: initialTrace,
@@ -110,12 +137,132 @@ export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage,
   const commandTriggerRef = useRef<HTMLButtonElement>(null);
   const lessonTriggerRef = useRef<HTMLButtonElement>(null);
   const constellationTriggerRef = useRef<HTMLButtonElement>(null);
-  const [announcement, setAnnouncement] = useState("");
+  const [announcement, setAnnouncement] = useState(() => migrationReport?.imported
+    ? translate(initialLanguage ?? systemLanguage(), "legacyImported")
+    : "");
   const [coreError, setCoreError] = useState(false);
+  const [storageReady, setStorageReady] = useState(!storage);
+  const lastPersistedRef = useRef<string | null>(null);
+  const [operationError, setOperationError] = useState(storageError ?? "");
+  const [offlineReady, setOfflineReady] = useState(false);
+  const [library, setLibrary] = useState<PuzzleRecord[] | null>(null);
+  const [rawImportOpen, setRawImportOpen] = useState(false);
+  const [rawPuzzle, setRawPuzzle] = useState("");
+  const [imageReviewOpen, setImageReviewOpen] = useState(false);
   const reducedMotion = useMediaQuery("(prefers-reduced-motion: reduce)");
   const narrowLayout = useMediaQuery("(max-width: 700px)");
   const step = state.trace[state.currentStep];
   const constellationOpen = state.constellationOpen;
+  const persistenceValue = {
+    puzzle: state.givens.join(""),
+    values: state.values,
+    noteMasks: state.candidates,
+    mode: state.solverMode,
+    trace: state.trace,
+    currentStep: state.currentStep,
+  };
+  const persistenceKey = sessionSignature(persistenceValue);
+
+  useEffect(() => {
+    const ready = () => setOfflineReady(true);
+    window.addEventListener("srr:offline-ready", ready);
+    return () => window.removeEventListener("srr:offline-ready", ready);
+  }, []);
+
+  useEffect(() => {
+    if (!storage) return;
+    let active = true;
+    setStorageReady(false);
+    storage.loadCurrentSession().then((session) => {
+      if (!active) return;
+      if (session) {
+        lastPersistedRef.current = sessionSignature(session);
+        dispatch({
+          type: "hydrate",
+          puzzle: session.puzzle,
+          values: session.values,
+          candidates: session.noteMasks,
+          solverMode: session.mode as typeof state.solverMode,
+          trace: session.trace as SolveStepV1[],
+          currentStep: session.currentStep,
+        });
+      } else {
+        lastPersistedRef.current = sessionSignature(persistenceValue);
+      }
+      setStorageReady(true);
+    }).catch(() => {
+      if (active) { setStorageReady(true); setOperationError("load"); }
+    });
+    return () => { active = false; };
+  }, [storage]);
+
+  useEffect(() => {
+    if (!storage || !storageReady || persistenceKey === lastPersistedRef.current) return;
+    const timer = window.setTimeout(() => {
+      storage.saveCurrentSession({
+        id: "current",
+        ...persistenceValue,
+        elapsedMs: 0,
+        savedAt: new Date().toISOString(),
+      }).then(() => { lastPersistedRef.current = persistenceKey; }).catch(() => setOperationError("save"));
+    }, saveDelayMs);
+    return () => window.clearTimeout(timer);
+  }, [persistenceKey, saveDelayMs, storageReady, storage]);
+
+  const savePuzzle = useCallback(async () => {
+    dispatch({ type: "setCommandOpen", open: false });
+    if (!storage) { setOperationError("unavailable"); return; }
+    try {
+      await storage.upsertPuzzle({ puzzle: state.givens.join(""), source: "web", updatedAt: new Date().toISOString() });
+    } catch { setOperationError("save-puzzle"); }
+  }, [state.givens, storage]);
+
+  const openLibrary = useCallback(async () => {
+    dispatch({ type: "setCommandOpen", open: false });
+    if (!storage) { setOperationError("unavailable"); return; }
+    try { setLibrary(await storage.listPuzzles()); }
+    catch { setOperationError("library"); }
+  }, [storage]);
+
+  const openRawImport = useCallback(() => {
+    dispatch({ type: "setCommandOpen", open: false });
+    setRawPuzzle("");
+    setRawImportOpen(true);
+  }, []);
+
+  const applyRawPuzzle = useCallback(async () => {
+    try {
+      const puzzle = normalizePuzzle(rawPuzzle);
+      dispatch({ type: "loadPuzzle", puzzle });
+      setRawImportOpen(false);
+      if (storage) await storage.importPuzzles([{ puzzle, source: "web-text-import", updatedAt: new Date().toISOString() }]);
+    } catch { setOperationError("raw-import"); }
+  }, [rawPuzzle, storage]);
+
+  const importBackup = useCallback(async () => {
+    dispatch({ type: "setCommandOpen", open: false });
+    if (!storage) { setOperationError("unavailable"); return; }
+    try {
+      const text = await fileActions.pickText(".srr.json,application/json");
+      if (text !== null) await storage.importBackup(text);
+    } catch { setOperationError("backup-import"); }
+  }, [fileActions, storage]);
+
+  const exportBackup = useCallback(async () => {
+    dispatch({ type: "setCommandOpen", open: false });
+    if (!storage) { setOperationError("unavailable"); return; }
+    try {
+      const text = await storage.exportBackup("0.4.0-beta.1");
+      fileActions.downloadText("sudoku-reasoning-radar.srr.json", text, "application/json");
+    } catch { setOperationError("backup-export"); }
+  }, [fileActions, storage]);
+
+  const applyReviewedImage = useCallback((puzzle: string) => {
+    dispatch({ type: "loadPuzzle", puzzle });
+    setImageReviewOpen(false);
+    if (storage) void storage.importPuzzles([{ puzzle, source: "web-image-review", updatedAt: new Date().toISOString() }])
+      .catch(() => setOperationError("image-import"));
+  }, [storage]);
 
   const closeCommand = useCallback(() => {
     dispatch({ type: "setCommandOpen", open: false });
@@ -206,8 +353,32 @@ export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage,
           <Constellation step={step} language={state.language} />
         </MobileSheet>
       )}
-      {state.commandOpen && <CommandPanel language={state.language} onAnalyze={analyze} onClose={closeCommand} />}
+      {state.commandOpen && <CommandPanel language={state.language} onAnalyze={analyze} onClose={closeCommand} onSave={savePuzzle} onLibrary={openLibrary} onImport={openRawImport} onBackupImport={importBackup} onBackupExport={exportBackup} onImageImport={() => { dispatch({ type: "setCommandOpen", open: false }); setImageReviewOpen(true); }} />}
+      {library && (
+        <div className="command-backdrop">
+          <section className="command-panel library-panel" role="dialog" aria-modal="true" aria-labelledby="library-title">
+            <header><h2 id="library-title">{translate(state.language, "puzzleLibrary")}</h2><button type="button" onClick={() => setLibrary(null)}>{translate(state.language, "close")}</button></header>
+            {library.length === 0 ? <p>{translate(state.language, "emptyLibrary")}</p> : library.map((record) => (
+              <button key={record.puzzle} type="button" onClick={() => { dispatch({ type: "loadPuzzle", puzzle: record.puzzle }); setLibrary(null); }}>
+                {record.name || record.puzzle} {record.difficulty ? `鈥?${record.difficulty}` : ""}
+              </button>
+            ))}
+          </section>
+        </div>
+      )}
+      {rawImportOpen && (
+        <div className="command-backdrop">
+          <section className="command-panel" role="dialog" aria-modal="true" aria-labelledby="raw-import-title">
+            <header><h2 id="raw-import-title">{translate(state.language, "importPuzzleText")}</h2><button type="button" onClick={() => setRawImportOpen(false)}>{translate(state.language, "close")}</button></header>
+            <label>{translate(state.language, "puzzleText")}<textarea value={rawPuzzle} onChange={(event) => setRawPuzzle(event.target.value)} /></label>
+            <button type="button" onClick={applyRawPuzzle}>{translate(state.language, "applyPuzzle")}</button>
+          </section>
+        </div>
+      )}
+      {imageReviewOpen && <ImageReviewDialog language={state.language} onClose={() => setImageReviewOpen(false)} onApply={applyReviewedImage} />}
       {coreError && <div className="core-toast" role="alert"><span>{translate(state.language, "responseFailed")}</span><button type="button" onClick={analyze}>{translate(state.language, "retry")}</button></div>}
+      {(storageError || operationError) && <div className="storage-toast" role="alert">{translate(state.language, storageError || operationError === "unavailable" ? "storageUnavailable" : "storageOperationFailed")}</div>}
+      {offlineReady && <output className="offline-status" aria-live="polite">{translate(state.language, "offlineReady")}</output>}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
     </div>
   );
@@ -215,11 +386,13 @@ export function ReasoningWorkspace({ initialPuzzle, coreClient, initialLanguage,
 
 interface CoreShellProps {
   loadClient?: () => Promise<CoreClient>;
+  loadStorage?: () => Promise<WebStorageRuntime>;
   initialPuzzle: string;
 }
 
-export function CoreShell({ loadClient = loadBrowserCoreClient, initialPuzzle }: CoreShellProps) {
+export function CoreShell({ loadClient = loadBrowserCoreClient, loadStorage = loadWebStorage, initialPuzzle }: CoreShellProps) {
   const [client, setClient] = useState<CoreClient | null>(null);
+  const [storageRuntime, setStorageRuntime] = useState<WebStorageRuntime | null | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
   useEffect(() => {
@@ -228,7 +401,21 @@ export function CoreShell({ loadClient = loadBrowserCoreClient, initialPuzzle }:
     loadClient().then((loaded) => active && setClient(loaded)).catch(() => active && setFailed(true));
     return () => { active = false; };
   }, [attempt, loadClient]);
-  if (client) return <ReasoningWorkspace initialPuzzle={initialPuzzle} coreClient={client} />;
+  useEffect(() => {
+    let active = true;
+    loadStorage().then((loaded) => {
+      if (active) setStorageRuntime(loaded);
+      else loaded.service.close();
+    }).catch(() => active && setStorageRuntime(null));
+    return () => { active = false; };
+  }, [loadStorage]);
+  if (client && storageRuntime !== undefined) return <ReasoningWorkspace
+    initialPuzzle={initialPuzzle}
+    coreClient={client}
+    storageService={storageRuntime?.service}
+    migrationReport={storageRuntime?.migrationReport}
+    storageError={storageRuntime === null ? "unavailable" : undefined}
+  />;
   if (failed) return <main className="launch-state"><div role="alert"><h1>{translate(systemLanguage(), "coreFailed")}</h1><button type="button" onClick={() => setAttempt((value) => value + 1)}>{translate(systemLanguage(), "retry")}</button></div></main>;
   return <main className="launch-state" aria-busy="true"><p>{translate(systemLanguage(), "loadingCore")}</p></main>;
 }

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Sudoku Reasoning Radar">
+  <rect width="512" height="512" rx="112" fill="#18233f"/>
+  <circle cx="256" cy="256" r="166" fill="#f3eee2" stroke="#ee765f" stroke-width="18"/>
+  <path d="M90 256h332M256 90v332M145 145l222 222M367 145 145 367" stroke="#18233f" stroke-width="10" opacity=".28"/>
+  <circle cx="256" cy="256" r="34" fill="#ee765f"/>
+  <circle cx="174" cy="196" r="22" fill="#74b8a0"/>
+  <circle cx="348" cy="174" r="18" fill="#e7b654"/>
+  <path d="m174 196 82 60 92-82" fill="none" stroke="#5d55a4" stroke-width="16" stroke-linecap="round"/>
+</svg>
