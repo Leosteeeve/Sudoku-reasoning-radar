@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { once } from "node:events";
+import { EventEmitter } from "node:events";
+import { PassThrough } from "node:stream";
 import test from "node:test";
 
 import { recognizeWithSidecar } from "../src/ocr-session.ts";
@@ -47,6 +49,34 @@ test("timeout terminates only the OCR helper session and cleans it up", async ()
   assert.ok(child);
   await exited(child);
   assert.notEqual(child.signalCode, null);
+});
+
+test("OCR completion waits for child exit with a bounded cleanup fallback", async () => {
+  const response = `${JSON.stringify({ version: 1, ok: true, puzzle, cells })}\n`;
+  const fakeChild = (exitAfterKill: boolean) => {
+    const child = new EventEmitter() as ChildProcessWithoutNullStreams & { killedBySession: boolean };
+    Object.assign(child, {
+      stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(),
+      exitCode: null, signalCode: null, killedBySession: false,
+      kill() {
+        child.killedBySession = true;
+        if (exitAfterKill) setTimeout(() => child.emit("exit", null, "SIGTERM"), 20);
+        return true;
+      },
+    });
+    queueMicrotask(() => child.stdout.write(response));
+    return child;
+  };
+
+  const exiting = fakeChild(true);
+  await recognizeWithSidecar("grid.png", { spawnHelper: () => exiting, timeoutMs: 1_000, cleanupTimeoutMs: 100, maxOutputBytes: 64 * 1024 });
+  assert.equal(exiting.killedBySession, true);
+
+  const hung = fakeChild(false);
+  const started = Date.now();
+  await recognizeWithSidecar("grid.png", { spawnHelper: () => hung, timeoutMs: 1_000, cleanupTimeoutMs: 25, maxOutputBytes: 64 * 1024 });
+  assert.equal(hung.killedBySession, true);
+  assert.ok(Date.now() - started >= 20 && Date.now() - started < 500);
 });
 
 test("crash, malformed JSON, oversized output, and schema mismatch are isolated", async () => {

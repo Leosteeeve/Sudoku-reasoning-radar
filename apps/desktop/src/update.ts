@@ -8,9 +8,17 @@ export interface UpdateSuccess {
   releaseUrl?: string;
 }
 
+export interface UpdateError {
+  version: 1;
+  status: "error";
+  code: string;
+}
+
+export type UpdateResult = UpdateSuccess | UpdateError;
+
 export interface UpdateCache {
   checkedAtMs: number;
-  response: UpdateSuccess;
+  response: UpdateResult;
 }
 
 export interface UpdateCheckerDependencies {
@@ -70,24 +78,33 @@ function newer(candidateValue: string, currentValue: string): boolean {
   return false;
 }
 
-export function createUpdateChecker(dependencies: UpdateCheckerDependencies): () => Promise<UpdateSuccess | { version: 1; status: "error"; code: string }> {
+export function createUpdateChecker(dependencies: UpdateCheckerDependencies): () => Promise<UpdateResult> {
+  let inFlight: Promise<UpdateResult> | undefined;
   return async () => {
     const now = dependencies.now();
     const cache = await dependencies.readCache();
     if (cache && now - cache.checkedAtMs < CACHE_DURATION_MS) return cache.response;
-    try {
-      const latest = release(await dependencies.fetchLatest());
-      const response: UpdateSuccess = {
-        version: 1,
-        status: "ok",
-        checkedAt: new Date(now).toISOString(),
-        available: newer(latest.tagName, dependencies.currentVersion),
-        releaseUrl: latest.url,
-      };
+    if (inFlight) return inFlight;
+    const attempt = (async (): Promise<UpdateResult> => {
+      let response: UpdateResult;
+      try {
+        const latest = release(await dependencies.fetchLatest());
+        const available = newer(latest.tagName, dependencies.currentVersion);
+        response = {
+          version: 1,
+          status: "ok",
+          checkedAt: new Date(now).toISOString(),
+          available,
+          ...(available ? { releaseUrl: latest.url } : {}),
+        };
+      } catch (error) {
+        response = { version: 1, status: "error", code: error instanceof Error && error.message === "unsafe-url" ? "unsafe-url" : "update-check-failed" };
+      }
       await dependencies.writeCache({ checkedAtMs: now, response });
       return response;
-    } catch (error) {
-      return { version: 1, status: "error", code: error instanceof Error && error.message === "unsafe-url" ? "unsafe-url" : "update-check-failed" };
-    }
+    })();
+    inFlight = attempt;
+    try { return await attempt; }
+    finally { if (inFlight === attempt) inFlight = undefined; }
   };
 }

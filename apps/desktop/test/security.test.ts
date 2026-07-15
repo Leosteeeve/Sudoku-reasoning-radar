@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { createPreloadApi } from "../src/preload-api.ts";
-import { CHANNELS, parseRequest } from "../src/protocol.ts";
+import { CHANNELS, parseRequest, parseResponse } from "../src/protocol.ts";
 import { registerIpcHandlers } from "../src/ipc.ts";
 import { createWindowOptions } from "../src/window.ts";
 
@@ -57,6 +57,26 @@ test("strict request validation rejects unknown versions, fields, and arbitrary 
   assert.throws(() => parseRequest(CHANNELS.backupImport, { version: 1, filePath: "C:\\secrets.txt" }), /unknown/i);
   assert.throws(() => parseRequest(CHANNELS.backupExport, { version: 1, contents: "{}", path: "C:\\overwrite.txt" }), /unknown/i);
   assert.throws(() => parseRequest("srr:process:spawn", { version: 1 }), /channel/i);
+});
+
+test("strict response validation rejects malformed nested IPC data", () => {
+  const validCell = { digit: 0, confidence: 90, lowConfidence: false };
+  const cells = Array.from({ length: 81 }, () => ({ ...validCell }));
+  assert.throws(() => parseResponse(CHANNELS.ocrSelectAndRecognize, {
+    version: 1, status: "ok", puzzle: "0".repeat(81), cells: [{ ...validCell, path: "C:\\secret" }, ...cells.slice(1)],
+  }), /unknown/i);
+  assert.throws(() => parseResponse(CHANNELS.ocrSelectAndRecognize, {
+    version: 1, status: "ok", puzzle: "1" + "0".repeat(80), cells,
+  }), /puzzle/i);
+  assert.throws(() => parseResponse(CHANNELS.legacyImport, {
+    version: 1, status: "ok", records: [{ puzzle: "0".repeat(81), filePath: "C:\\secret" }], errors: [],
+  }), /unknown/i);
+  assert.throws(() => parseResponse(CHANNELS.legacyImport, {
+    version: 1, status: "ok", records: [], errors: [{ line: 0, message: "bad" }],
+  }), /line/i);
+  assert.throws(() => parseResponse(CHANNELS.updateCheck, {
+    version: 1, status: "ok", checkedAt: "yesterday", available: false,
+  }), /checkedAt/i);
 });
 
 test("IPC registration installs only the fixed allowlist", () => {

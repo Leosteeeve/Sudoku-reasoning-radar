@@ -6,7 +6,8 @@ export const MAX_IMAGE_BYTES = 8 * 1024 * 1024;
 const supportedTypes = new Set(["image/png", "image/jpeg", "image/webp"]);
 
 export interface ImageImportAdapter {
-  extract(file: File): Promise<number[]>;
+  extract?(file: File): Promise<number[]>;
+  select?(): Promise<number[] | null>;
 }
 
 export const emptyImageImportAdapter: ImageImportAdapter = {
@@ -68,11 +69,26 @@ export function ImageReviewDialog({ adapter = emptyImageImportAdapter, onApply, 
       const url = URL.createObjectURL(file);
       previewRef.current = url;
       setPreview(url);
-      const extracted = await adapter.extract(file);
-      if (extracted.length !== 81 || extracted.some((digit) => !Number.isInteger(digit) || digit < 0 || digit > 9)) {
-        throw new Error("Image adapter must return 81 digits from 0 to 9.");
-      }
-      setValues([...extracted]);
+      if (!adapter.extract) throw new Error("File image import is unavailable.");
+      applyExtracted(await adapter.extract(file));
+      setError("");
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : String(reason));
+    }
+  };
+
+  const applyExtracted = (extracted: number[]) => {
+    if (extracted.length !== 81 || extracted.some((digit) => !Number.isInteger(digit) || digit < 0 || digit > 9)) {
+      throw new Error("Image adapter must return 81 digits from 0 to 9.");
+    }
+    setValues([...extracted]);
+  };
+
+  const selectDesktopImage = async () => {
+    if (!adapter.select) return;
+    try {
+      const extracted = await adapter.select();
+      if (extracted) applyExtracted(extracted);
       setError("");
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : String(reason));
@@ -89,7 +105,9 @@ export function ImageReviewDialog({ adapter = emptyImageImportAdapter, onApply, 
       <section className="command-panel image-review" role="dialog" aria-modal="true" aria-labelledby="image-review-title">
         <header><h2 id="image-review-title">{translate(language, "imageReviewTitle")}</h2><button type="button" onClick={onClose}>{translate(language, "close")}</button></header>
         <p>{translate(language, "imageDisclaimer")}</p>
-        <label>{translate(language, "selectImage")}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void chooseImage(event.target.files?.[0])} /></label>
+        {adapter.select
+          ? <button type="button" onClick={() => void selectDesktopImage()}>{translate(language, "selectImage")}</button>
+          : <label>{translate(language, "selectImage")}<input type="file" accept="image/png,image/jpeg,image/webp" onChange={(event) => void chooseImage(event.target.files?.[0])} /></label>}
         {preview && <img className="image-preview" src={preview} alt={translate(language, "imagePreview")} />}
         <div className="image-review-grid" aria-label="Editable image review cells">
           {values.map((digit, index) => (

@@ -28,7 +28,9 @@ set_target_properties(srr_ocr_helper PROPERTIES OUTPUT_NAME "srr-ocr-helper")
 
 find_package(OpenCV QUIET COMPONENTS core imgproc imgcodecs)
 find_package(Tesseract QUIET)
+set(SRR_OCR_ENABLED_JSON false)
 if(OpenCV_FOUND AND Tesseract_FOUND)
+    set(SRR_OCR_ENABLED_JSON true)
     target_compile_definitions(srr_ocr_helper PRIVATE SRR_OCR_ENABLED=1)
     target_sources(srr_ocr_helper PRIVATE
         src/OCRImport.cpp
@@ -39,6 +41,10 @@ if(OpenCV_FOUND AND Tesseract_FOUND)
     target_include_directories(srr_ocr_helper PRIVATE ${OpenCV_INCLUDE_DIRS} ${Tesseract_INCLUDE_DIRS})
     target_link_libraries(srr_ocr_helper PRIVATE srr_core ${OpenCV_LIBS} ${Tesseract_LIBRARIES})
 endif()
+file(GENERATE
+    OUTPUT "$<TARGET_FILE_DIR:srr_ocr_helper>/srr-ocr-capabilities.json"
+    CONTENT "{\"version\":1,\"ocrEnabled\":${SRR_OCR_ENABLED_JSON}}\n"
+)
 
 if(EMSCRIPTEN)
     add_executable(srr_core_wasm src/WasmExports.cpp)

@@ -11,10 +11,11 @@
     "@types/node": "24.10.12",
     "electron": "43.1.0",
     "electron-builder": "26.15.3",
+    "esbuild": "0.27.0",
     "typescript": "5.9.3"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node scripts/build-preload.mjs",
     "test": "node --test test/*.test.ts",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "dev": "pnpm build && electron .",
@@ -27,7 +28,7 @@
     "files": ["dist/**", "package.json"],
     "extraResources": [
       { "from": "../renderer/dist", "to": "renderer" },
-      { "from": "../../out/build/native-release/srr-ocr-helper.exe", "to": "ocr/srr-ocr-helper.exe" }
+      { "from": "../../out/ocr-runtime", "to": "ocr" }
     ],
     "win": {
       "target": ["nsis", "portable"]

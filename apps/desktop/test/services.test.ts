@@ -87,7 +87,7 @@ test("legacy discovery is copy-only, normalized, deduplicated, and idempotent", 
   }
 });
 
-test("update checks cache for 24 hours and reject unsafe release URLs", async () => {
+test("update checks cache all attempts for 24 hours and reject unsafe release URLs", async () => {
   let now = Date.parse("2026-07-15T00:00:00.000Z");
   let calls = 0;
   let cache: UpdateCache | undefined;
@@ -113,10 +113,31 @@ test("update checks cache for 24 hours and reject unsafe release URLs", async ()
     currentVersion: "0.4.0-beta.1",
     now: () => now,
     readCache: async () => undefined,
-    writeCache: async () => assert.fail("unsafe result must not be cached"),
+    writeCache: async () => undefined,
     fetchLatest: async () => ({ tag_name: "v9.0.0", html_url: "http://example.com/download.exe" }),
   });
   assert.deepEqual(await unsafe(), { version: 1, status: "error", code: "unsafe-url" });
+});
+
+test("failed and concurrent update checks are cached and coalesced", async () => {
+  let calls = 0;
+  let cache: UpdateCache | undefined;
+  const checker = createUpdateChecker({
+    currentVersion: "0.4.0-beta.1",
+    now: () => Date.parse("2026-07-15T00:00:00.000Z"),
+    readCache: async () => cache,
+    writeCache: async (value) => { cache = value; },
+    fetchLatest: async () => {
+      calls += 1;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      throw new Error("offline");
+    },
+  });
+  const attempts = await Promise.all([checker(), checker(), checker()]);
+  assert.equal(calls, 1);
+  assert.ok(attempts.every((attempt) => attempt.status === "error"));
+  assert.deepEqual(await checker(), attempts[0]);
+  assert.equal(calls, 1);
 });
 
 test("update availability follows stable and prerelease semantic version ordering", async () => {

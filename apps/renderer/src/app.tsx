@@ -1,14 +1,15 @@
 import type { CoreClient, SolveStepV1 } from "@srr/core-client";
 import { normalizePuzzle, type MigrationReport, type PuzzleRecord, type StorageService } from "@srr/storage";
-import { useCallback, useEffect, useReducer, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Board } from "./components/Board";
 import { CommandPanel } from "./components/CommandPanel";
 import { Constellation, isAdvancedStep } from "./components/Constellation";
 import { LessonCard } from "./components/LessonCard";
-import { ImageReviewDialog } from "./components/ImageReviewDialog";
+import { ImageReviewDialog, type ImageImportAdapter } from "./components/ImageReviewDialog";
 import { Timeline } from "./components/Timeline";
 import { TopBar } from "./components/TopBar";
 import { loadBrowserCoreClient } from "./core/wasm-transport";
+import { createDesktopFileActions, createDesktopImageImportAdapter, getDesktopBridge, type DesktopBridge } from "./desktop/bridge";
 import { systemLanguage, translate } from "./i18n";
 import { actionForKey, createInitialSession, sessionReducer, type Language } from "./session";
 import { browserFileActions, type BrowserFileActions } from "./web/files";
@@ -25,6 +26,8 @@ interface WorkspaceProps {
   fileActions?: BrowserFileActions;
   storageError?: string;
   migrationReport?: MigrationReport;
+  imageImportAdapter?: ImageImportAdapter;
+  updateReleaseUrl?: string;
 }
 
 function sessionSignature(value: {
@@ -129,6 +132,7 @@ type WorkspaceStorage = Pick<StorageService,
 export function ReasoningWorkspace({
   initialPuzzle, coreClient, initialLanguage, initialTrace = [], storageService: storage,
   saveDelayMs = 300, fileActions = browserFileActions, storageError, migrationReport,
+  imageImportAdapter, updateReleaseUrl,
 }: WorkspaceProps & { storageService?: WorkspaceStorage }) {
   const [state, dispatch] = useReducer(sessionReducer, undefined, () => ({
     ...createInitialSession(initialPuzzle, { language: initialLanguage ?? systemLanguage() }),
@@ -253,7 +257,7 @@ export function ReasoningWorkspace({
     if (!storage) { setOperationError("unavailable"); return; }
     try {
       const text = await storage.exportBackup("0.4.0-beta.1");
-      fileActions.downloadText("sudoku-reasoning-radar.srr.json", text, "application/json");
+      await fileActions.downloadText("sudoku-reasoning-radar.srr.json", text, "application/json");
     } catch { setOperationError("backup-export"); }
   }, [fileActions, storage]);
 
@@ -375,10 +379,11 @@ export function ReasoningWorkspace({
           </section>
         </div>
       )}
-      {imageReviewOpen && <ImageReviewDialog language={state.language} onClose={() => setImageReviewOpen(false)} onApply={applyReviewedImage} />}
+      {imageReviewOpen && <ImageReviewDialog adapter={imageImportAdapter} language={state.language} onClose={() => setImageReviewOpen(false)} onApply={applyReviewedImage} />}
       {coreError && <div className="core-toast" role="alert"><span>{translate(state.language, "responseFailed")}</span><button type="button" onClick={analyze}>{translate(state.language, "retry")}</button></div>}
       {(storageError || operationError) && <div className="storage-toast" role="alert">{translate(state.language, storageError || operationError === "unavailable" ? "storageUnavailable" : "storageOperationFailed")}</div>}
       {offlineReady && <output className="offline-status" aria-live="polite">{translate(state.language, "offlineReady")}</output>}
+      {updateReleaseUrl && <input className="update-release-url" aria-label={translate(state.language, "releasePage")} readOnly value={updateReleaseUrl} />}
       <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">{announcement}</div>
     </div>
   );
@@ -388,13 +393,27 @@ interface CoreShellProps {
   loadClient?: () => Promise<CoreClient>;
   loadStorage?: () => Promise<WebStorageRuntime>;
   initialPuzzle: string;
+  desktopBridge?: DesktopBridge;
 }
 
-export function CoreShell({ loadClient = loadBrowserCoreClient, loadStorage = loadWebStorage, initialPuzzle }: CoreShellProps) {
+export function CoreShell({ loadClient = loadBrowserCoreClient, loadStorage, initialPuzzle, desktopBridge = getDesktopBridge() }: CoreShellProps) {
   const [client, setClient] = useState<CoreClient | null>(null);
   const [storageRuntime, setStorageRuntime] = useState<WebStorageRuntime | null | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [updateReleaseUrl, setUpdateReleaseUrl] = useState<string>();
+  const storageLoader = useCallback(
+    () => loadStorage ? loadStorage() : loadWebStorage(desktopBridge),
+    [desktopBridge, loadStorage],
+  );
+  const fileActions = useMemo(
+    () => desktopBridge ? createDesktopFileActions(desktopBridge) : undefined,
+    [desktopBridge],
+  );
+  const imageImportAdapter = useMemo(
+    () => desktopBridge ? createDesktopImageImportAdapter(desktopBridge) : undefined,
+    [desktopBridge],
+  );
   useEffect(() => {
     let active = true;
     setFailed(false);
@@ -403,18 +422,29 @@ export function CoreShell({ loadClient = loadBrowserCoreClient, loadStorage = lo
   }, [attempt, loadClient]);
   useEffect(() => {
     let active = true;
-    loadStorage().then((loaded) => {
+    storageLoader().then((loaded) => {
       if (active) setStorageRuntime(loaded);
       else loaded.service.close();
     }).catch(() => active && setStorageRuntime(null));
     return () => { active = false; };
-  }, [loadStorage]);
+  }, [storageLoader]);
+  useEffect(() => {
+    if (!desktopBridge) return;
+    let active = true;
+    desktopBridge.update.check().then((result) => {
+      if (active && result.status === "ok" && result.available) setUpdateReleaseUrl(result.releaseUrl);
+    }).catch(() => undefined);
+    return () => { active = false; };
+  }, [desktopBridge]);
   if (client && storageRuntime !== undefined) return <ReasoningWorkspace
     initialPuzzle={initialPuzzle}
     coreClient={client}
     storageService={storageRuntime?.service}
     migrationReport={storageRuntime?.migrationReport}
     storageError={storageRuntime === null ? "unavailable" : undefined}
+    fileActions={fileActions}
+    imageImportAdapter={imageImportAdapter}
+    updateReleaseUrl={updateReleaseUrl}
   />;
   if (failed) return <main className="launch-state"><div role="alert"><h1>{translate(systemLanguage(), "coreFailed")}</h1><button type="button" onClick={() => setAttempt((value) => value + 1)}>{translate(systemLanguage(), "retry")}</button></div></main>;
   return <main className="launch-state" aria-busy="true"><p>{translate(systemLanguage(), "loadingCore")}</p></main>;

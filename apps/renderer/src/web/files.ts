@@ -1,6 +1,6 @@
 export interface BrowserFileActions {
   pickText(accept: string): Promise<string | null>;
-  downloadText(filename: string, text: string, type: string): void;
+  downloadText(filename: string, text: string, type: string): void | Promise<void>;
 }
 
 export function createBrowserFileActions(documentRef: Document = document): BrowserFileActions {

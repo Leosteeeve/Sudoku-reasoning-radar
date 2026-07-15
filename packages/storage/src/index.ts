@@ -118,3 +118,9 @@ export {
   type BackupData,
   type BackupV1,
 } from "./backup.ts";
+export {
+  migrateLegacyDesktopPuzzles,
+  type DesktopLegacyImportResult,
+  type DesktopLegacySource,
+  type DesktopMigrationStore,
+} from "./desktop.ts";

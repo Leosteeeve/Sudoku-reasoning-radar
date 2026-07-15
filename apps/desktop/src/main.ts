@@ -37,7 +37,7 @@ async function readUpdateCache(cachePath: string): Promise<UpdateCache | undefin
 }
 
 async function createWindow(): Promise<void> {
-  const window = new BrowserWindow(createWindowOptions(path.join(moduleDirectory, "preload.js")));
+  const window = new BrowserWindow(createWindowOptions(path.join(moduleDirectory, "preload.cjs")));
   window.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
   window.webContents.on("will-navigate", (event, url) => {
     if (url !== window.webContents.getURL()) event.preventDefault();

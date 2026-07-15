@@ -13,6 +13,7 @@ export type OcrSessionResult =
 export interface OcrSessionOptions {
   spawnHelper(): ChildProcessWithoutNullStreams;
   timeoutMs: number;
+  cleanupTimeoutMs?: number;
   maxOutputBytes: number;
 }
 
@@ -53,19 +54,27 @@ export function recognizeWithSidecar(imagePath: string, options: OcrSessionOptio
   return new Promise((resolve) => {
     let child: ChildProcessWithoutNullStreams;
     try { child = options.spawnHelper(); } catch { resolve({ version: 1, status: "error", code: "crash" }); return; }
-    let settled = false;
+    let resultPending: OcrSessionResult | undefined;
+    let exited = false;
+    let cleanupTimer: ReturnType<typeof setTimeout> | undefined;
     let output = "";
     let outputBytes = 0;
 
+    const resolveResult = () => {
+      if (!resultPending) return;
+      if (cleanupTimer) clearTimeout(cleanupTimer);
+      child.off("exit", onExit);
+      resolve(resultPending);
+    };
     const finish = (result: OcrSessionResult) => {
-      if (settled) return;
-      settled = true;
+      if (resultPending) return;
+      resultPending = result;
       clearTimeout(timer);
       child.stdout.off("data", onData);
       child.off("error", onError);
-      child.off("exit", onExit);
-      if (child.exitCode === null && child.signalCode === null) child.kill();
-      resolve(result);
+      if (exited || child.exitCode !== null || child.signalCode !== null) { resolveResult(); return; }
+      try { child.kill(); } catch { /* bounded cleanup timer still resolves the session */ }
+      cleanupTimer = setTimeout(resolveResult, options.cleanupTimeoutMs ?? 1_000);
     };
     const parseOutput = () => finish(parseSidecarLine(output.trim()));
     const onData = (chunk: Buffer | string) => {
@@ -76,7 +85,8 @@ export function recognizeWithSidecar(imagePath: string, options: OcrSessionOptio
     };
     const onError = () => finish({ version: 1, status: "error", code: "crash" });
     const onExit = (code: number | null) => {
-      if (settled) return;
+      exited = true;
+      if (resultPending) { resolveResult(); return; }
       if (output.trim()) parseOutput();
       else finish({ version: 1, status: "error", code: code === 0 ? "malformed-response" : "crash" });
     };
